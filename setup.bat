@@ -147,6 +147,17 @@ if %ERRORLEVEL% NEQ 0 (
     goto sync_env
 )
 
+wsl.exe whoami >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    net session >nul 2>&1
+    if !ERRORLEVEL! NEQ 0 (
+        echo       [NOTICE] WSL virtual disk access requires Administrator privileges.
+        echo       Requesting elevation prompt...
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd -ArgumentList '/c \"\"%~f0\"\"' -WorkingDirectory '%ROOT%' -Verb RunAs"
+        exit /b 0
+    )
+)
+
 echo       [INFO] WSL environment detected. Checking PostgreSQL service...
 wsl -u root -- which psql >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
