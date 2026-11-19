@@ -1,5 +1,6 @@
-# Jalankan: docker compose up --build   (salin .env.example menjadi .env dulu)
-# Layanan: db (PostgreSQL 16), backend (FastAPI), frontend (Next.js).
+# Jalankan pertama kali: docker compose up --build
+# Jalankan berikutnya:   docker compose up
+# Layanan: db (PostgreSQL 16), backend (FastAPI + --reload), frontend (Next.js dev server).
 services:
   db:
     image: postgres:16
@@ -24,6 +25,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Menjalankan bootstrap lalu uvicorn dengan --reload agar perubahan file Python langsung dimuat ulang
+    command: sh -c "python -m scripts.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-sis}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sis}
       JWT_SECRET: ${JWT_SECRET:?isi JWT_SECRET di .env}
@@ -35,6 +38,8 @@ services:
       SQL_DIR: /data/init
       SEED_OUTPUT_DIR: /app/seed_output
     volumes:
+      - ./backend/app:/app/app
+      - ./backend/scripts:/app/scripts
       - ./database/dataset_bersih:/data/dataset_bersih:ro
       - ./database/init:/data/init:ro
       - ./backend/seed_output:/app/seed_output
@@ -42,13 +47,24 @@ services:
       - "8000:8000"
 
   frontend:
+    # Target 'build' berhenti sebelum tahap production standalone, sehingga npm dan seluruh source/devDependencies tersedia
     build:
       context: ./frontend
+      target: build
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
     restart: unless-stopped
     depends_on:
       - backend
+    # Menjalankan Next.js dev server (Fast Refresh)
+    command: npm run dev
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+      WATCHPACK_POLLING: "true" # Memastikan file watcher tetap mendeteksi perubahan file di Docker Desktop Windows
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Anonymous volume agar node_modules Linux di dalam image tidak tertimpa folder lokal
+      - /app/.next
     ports:
       - "3000:3000"
 
