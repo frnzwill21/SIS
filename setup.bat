@@ -150,6 +150,13 @@ if %ERRORLEVEL% NEQ 0 (
 echo       [INFO] WSL environment detected. Checking PostgreSQL service...
 wsl -u root -- which psql >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
+    echo       [PROVISIONING] Installing PostgreSQL in WSL...
+    wsl -u root -- apt-get update >nul 2>&1
+    wsl -u root -- apt-get install -y postgresql postgresql-contrib >nul 2>&1
+)
+
+wsl -u root -- which psql >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
     echo       [INFO] PostgreSQL package not found in WSL. Assuming native Windows or Docker DB.
     goto sync_env
 )
@@ -157,12 +164,13 @@ if %ERRORLEVEL% NEQ 0 (
 wsl -u root -- /usr/sbin/service postgresql start >nul 2>&1
 :: Kata sandi DB acak per instalasi (tidak ada lagi sandi bawaan di skrip). Bila .env sudah berisi sandi sungguhan, pakai itu.
 set "DB_PASS="
-for /f "usebackq delims=" %%p in (`python -c "import re,secrets,pathlib; f=pathlib.Path(r'%ROOT%.env'); t=f.read_text(encoding='utf-8') if f.exists() else ''; m=re.search(r'DATABASE_URL=postgresql\+psycopg://[^:]+:([^@]+)@', t); print(m.group(1) if m and 'ganti-dengan' not in m.group(1) else secrets.token_urlsafe(18))"`) do set "DB_PASS=%%p"
+for /f "usebackq delims=" %%p in (`python -c "import re,secrets,pathlib; f=pathlib.Path(r'%ROOT%.env'); t=f.read_text(encoding='utf-8') if f.exists() else ''; m=re.search(r'DATABASE_URL=postgresql\+psycopg://[^:]+:([^@]+)@', t); m2=re.search(r'^POSTGRES_PASSWORD=(.+)$', t, re.M); existing=(m.group(1) if m and 'ganti-dengan' not in m.group(1) else (m2.group(1) if m2 and 'ganti-dengan' not in m2.group(1) else '')); print(existing.strip() if existing.strip() else secrets.token_urlsafe(18))"`) do set "DB_PASS=%%p"
 wsl -u postgres -- psql -c "CREATE USER sis WITH PASSWORD '!DB_PASS!';" >nul 2>&1
 wsl -u postgres -- psql -c "ALTER USER sis WITH PASSWORD '!DB_PASS!';" >nul 2>&1
 wsl -u postgres -- psql -c "CREATE DATABASE sis OWNER sis;" >nul 2>&1
-wsl -u root -- sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/16/main/postgresql.conf >nul 2>&1
-wsl -u root -- sh -c "grep -q '172.16.0.0/12' /etc/postgresql/16/main/pg_hba.conf || echo 'host sis sis 172.16.0.0/12 scram-sha-256' >> /etc/postgresql/16/main/pg_hba.conf" >nul 2>&1
+wsl -u root -- sh -c "sed -i \"s/#listen_addresses = 'localhost'/listen_addresses = '*'/\" /etc/postgresql/*/main/postgresql.conf" >nul 2>&1
+wsl -u root -- sh -c "grep -q '172.16.0.0/12' /etc/postgresql/*/main/pg_hba.conf || echo 'host sis sis 172.16.0.0/12 scram-sha-256' >> /etc/postgresql/*/main/pg_hba.conf" >nul 2>&1
+wsl -u root -- sh -c "grep -q '0.0.0.0/0' /etc/postgresql/*/main/pg_hba.conf || echo 'host sis sis 0.0.0.0/0 scram-sha-256' >> /etc/postgresql/*/main/pg_hba.conf" >nul 2>&1
 wsl -u root -- /usr/sbin/service postgresql restart >nul 2>&1
 
 for /f "tokens=1" %%i in ('wsl -u root -- hostname -I') do set "WSL_IP=%%i"
@@ -170,7 +178,7 @@ for /f "tokens=1" %%i in ('wsl -u root -- hostname -I') do set "WSL_IP=%%i"
 :sync_env
 cd /d "%ROOT%backend"
 call .venv\Scripts\activate.bat
-python -c "import os, re, secrets; p = os.path.join(r'%ROOT%.', '.env'); t = open(p, 'r', encoding='utf-8').read(); ip = os.environ.get('WSL_IP', '').strip(); t = re.sub(r'^#\s*(DATABASE_URL=)', r'\1', t, flags=re.M); t = re.sub(r'(DATABASE_URL=postgresql\+psycopg://[^:]+:)ganti-dengan-kata-sandi-kuat(@)', r'\1' + os.environ.get('DB_PASS', 'ganti-dengan-kata-sandi-kuat') + r'\2', t); t = (re.sub(r'(@)[^:/]+(:5432)', r'\g<1>' + ip + r'\2', t) if ip else t); t = re.sub(r'JWT_SECRET=ganti-dengan-string-acak-panjang', 'JWT_SECRET=' + secrets.token_urlsafe(32), t); open(p, 'w', encoding='utf-8').write(t)"
+python -c "import os, re, secrets; p = os.path.join(r'%ROOT%.', '.env'); t = open(p, 'r', encoding='utf-8').read(); ip = os.environ.get('WSL_IP', '').strip(); dp = os.environ.get('DB_PASS', '').strip(); t = re.sub(r'^#\s*(DATABASE_URL=)', r'\1', t, flags=re.M); t = (re.sub(r'^POSTGRES_PASSWORD=.*$', 'POSTGRES_PASSWORD=' + dp, t, flags=re.M) if dp and 'ganti-dengan' not in dp else t); t = (re.sub(r'(DATABASE_URL=postgresql\+psycopg://[^:]+:)[^@]+(@)', r'\g<1>' + dp + r'\2', t) if dp and 'ganti-dengan' not in dp else t); t = (re.sub(r'(@)[^:/]+(:5432)', r'\g<1>' + ip + r'\2', t) if ip else t); t = re.sub(r'JWT_SECRET=ganti-dengan-string-acak-panjang', 'JWT_SECRET=' + secrets.token_urlsafe(32), t); open(p, 'w', encoding='utf-8').write(t)"
 if defined WSL_IP (
     echo       [INFO] Bound active WSL dynamic host IP: !WSL_IP!
 )
