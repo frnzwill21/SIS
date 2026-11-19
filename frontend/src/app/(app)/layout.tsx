@@ -73,7 +73,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             </div>
             {!collapsed && (
               <div className="flex flex-col truncate">
-                <span className="text-sm font-bold tracking-tight text-slate-900">Schoolwise</span>
+                <span className="text-sm font-bold tracking-tight text-slate-900">School Intelligent System</span>
                 <span className="text-[10px] font-semibold tracking-wider text-blue-600 uppercase">
                   {isAdmin ? 'Admin Workspace' : 'Teacher Portal'}
                 </span>
@@ -94,7 +94,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <div className="mx-3 mt-3 flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-2.5">
             <div className="flex flex-col truncate">
               <span className="truncate text-xs font-semibold text-slate-800">SMKN 4 Bandung</span>
-              <span className="text-[11px] text-slate-500">Tahun Ajaran 2026/2027 (XII)</span>
+              <span className="text-[11px] text-slate-500">Tahun Ajaran 2026/2027</span>
             </div>
             <School className="h-4 w-4 shrink-0 text-slate-400" />
           </div>
@@ -239,19 +239,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
         {/* Sidebar Footer */}
         <div className="border-t border-slate-100 p-3 space-y-2">
-          {!collapsed && (
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-2.5">
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
-                </span>
-                <span className="text-xs font-semibold text-slate-800">{health?.status === 'ok' ? 'Sistem Terkoneksi' : 'Sistem Bermasalah'}</span>
-              </div>
-              <p className="mt-1 text-[11px] text-slate-500">21 tabel & 56.071 data siap membantu</p>
-            </div>
-          )}
-
           <div className="flex items-center justify-between gap-2 pt-1">
             <Link
               href="/akun"
@@ -297,11 +284,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500 hidden sm:inline-block">
-              Hybrid Engine: <strong className="font-semibold text-slate-700">{health?.gemini?.startsWith('aktif') ? 'Gemini + RAG' : 'Mode aturan + RAG'}</strong>
-            </span>
-          </div>
         </header>
 
         {/* Dynamic page content */}

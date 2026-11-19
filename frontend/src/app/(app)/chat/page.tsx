@@ -130,20 +130,6 @@ export default function Chat() {
         {msgs.length === 0 ? (
           /* HERO WELCOME SCREEN (Sesuai Frame 13:2 Figma) */
           <div className="mx-auto flex max-w-3xl flex-col items-center justify-center pt-8 text-center">
-            {/* Assistant Spark Emblem */}
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white shadow-lg shadow-blue-200">
-              <Sparkles className="h-7 w-7" />
-            </div>
-
-            <span className="text-[11px] font-bold tracking-widest text-blue-600 uppercase">
-              SMKN 4 BANDUNG • SMART WORKSPACE
-            </span>
-            <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">
-              Bantuan Cerdas untuk Data Sekolah
-            </h2>
-            <p className="mt-2 max-w-lg text-sm text-slate-500">
-              Temukan jawaban seputar data siswa, rapor nilai, absensi, jadwal pelajaran, hingga penempatan PKL kelas XII secara instan dan akurat.
-            </p>
 
             {/* Suggested cards */}
             <div className="mt-8 grid w-full grid-cols-1 gap-3.5 text-left sm:grid-cols-3">
@@ -277,10 +263,7 @@ export default function Chat() {
 
           <div className="flex items-center justify-between border-t border-slate-100 pt-2">
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700 border border-emerald-200/60">
-                <ShieldCheck className="h-3 w-3 text-emerald-600" />
-                21 Tabel Terverifikasi
-              </span>
+              
             </div>
 
             <div className="flex items-center gap-2">
