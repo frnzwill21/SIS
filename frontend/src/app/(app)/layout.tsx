@@ -69,7 +69,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <div className="flex h-16 items-center justify-between border-b border-slate-100 px-4">
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-200">
-              <GraduationCap className="h-5 w-5" />
+              <img src="../../assets/images/image.png" />
             </div>
             {!collapsed && (
               <div className="flex flex-col truncate">

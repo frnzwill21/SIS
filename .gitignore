@@ -9,3 +9,8 @@ backend/seed_output/*
 !backend/seed_output/.gitkeep
 
 ref/
+.pytest_cache/
+*.pytest_cache/
+backend/.pytest_cache/
+repomix-output.xml
+
