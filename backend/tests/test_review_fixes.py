@@ -17,7 +17,7 @@ from app.engine.core import Result
 compose = sys.modules["app.engine.compose"]  # `app.engine.compose` sebagai atribut adalah FUNGSI (ditimpa __init__)
 engine_pkg = sys.modules["app.engine"]
 
-NIS, NISN = "2627001", "0081234567"
+NIS, NISN = "24251001", "0087612943"
 
 
 class FakeDb:
@@ -26,8 +26,8 @@ class FakeDb:
             return [{"nis": NIS, "nisn": NISN, "nama": "Aditya Ramadhan", "jenis_kelamin": "L", "no_absen": 3,
                      "kelas_kode": "XII-RPL-2", "kelas": "XII RPL 2", "wali_kelas": "Budi S.Pd.", "jurusan": "RPL"}]
         if "FROM pelanggaran pl" in sql:
-            return [{"pelanggaran": "Membolos", "tingkat": "Sedang", "frekuensi": 3, "total_poin": 30,
-                     "tanggal_terakhir": "2026-09-01", "tindak_lanjut": "Panggilan orang tua"}]
+            return [{"pelanggaran": "Membolos", "tingkat": "Sedang", "poin": 25,
+                     "tanggal_kejadian": "2026-09-01", "tindak_lanjut": "Panggilan orang tua"}]
         return []
 
 
@@ -171,8 +171,9 @@ def test_active_user_menolak_sandi_sementara():
 
 
 def test_validasi_sandi_baru():
-    assert auth.validate_new_password("pendek") is not None
+    assert auth.validate_new_password("") is not None
     assert auth.validate_new_password("a" * 80) is not None
+    assert auth.validate_new_password("1", "budi") is None
     assert auth.validate_new_password("Sandi-Kuat-2026!", "budi") is None
 
 

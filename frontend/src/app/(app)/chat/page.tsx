@@ -7,16 +7,12 @@ import {
   ArrowRight,
   ShieldCheck,
   Send,
-  Paperclip,
   Calendar,
   GraduationCap,
-  Users,
   Building,
   AlertTriangle,
-  Bot,
+  AlertCircle,
   User as UserIcon,
-  HelpCircle,
-  FileText
 } from 'lucide-react';
 
 type TabelEngine = { kolom: string[]; baris: unknown[][] };
@@ -24,6 +20,7 @@ type TabelEngine = { kolom: string[]; baris: unknown[][] };
 type Msg = {
   role: 'user' | 'ai';
   text: string;
+  isError?: boolean;
   tabel?: Row[] | TabelEngine | null;
   sumber?: string[];
   sensitif?: boolean;
@@ -32,36 +29,60 @@ type Msg = {
   contoh?: string[];
 };
 
+const MAX_PESAN = 500;
+
 const SUGGESTIONS = [
   {
     topic: 'Akademik & Jadwal',
     icon: Calendar,
     color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
     title: 'Jadwal Kelas',
-    prompt: 'Jadwal pelajaran XII TITL 6 hari Senin' // satu pertanyaan = satu intent; gabungan dua intent belum didukung engine
+    prompt: 'Jadwal pelajaran XII TITL 6 hari Senin', // satu pertanyaan = satu intent; gabungan dua intent belum didukung engine
   },
   {
     topic: 'Nilai & Kelulusan',
     icon: GraduationCap,
     color: 'text-blue-600 bg-blue-50 border-blue-100',
     title: 'Evaluasi Nilai KKM',
-    prompt: 'Siswa XII RPL 1 yang nilainya di bawah KKM pada semester 5'
+    prompt: 'Siswa XII RPL 1 yang nilainya di bawah KKM pada semester 5',
   },
   {
     topic: 'Kemitraan Industri',
     icon: Building,
     color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
     title: 'Penempatan PKL Siswa',
-    prompt: 'Siapa saja siswa yang ditempatkan PKL di PLN dan apa posisinya?'
-  }
+    prompt: 'Siapa saja siswa yang ditempatkan PKL di PLN dan apa posisinya?',
+  },
 ];
 
 export default function Chat() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [hydrated, setHydrated] = useState(false);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   const busyRef = useRef(false); // `busy` (state) basi di dalam handler event sidebar & klik ganda cepat
+  const epochRef = useRef(0); // mencegah respons lama muncul setelah klik "Percakapan Baru"
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('sis_chat_history');
+      if (saved && !sessionStorage.getItem('sis_reset_chat')) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setMsgs(parsed);
+      }
+    } catch { /* abaikan storage korup */ }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      const persistable = msgs.filter((m) => !m.isError).slice(-40);
+      if (persistable.length === 0) sessionStorage.removeItem('sis_chat_history');
+      else sessionStorage.setItem('sis_chat_history', JSON.stringify(persistable));
+    } catch { /* abaikan bila kuota penuh */ }
+  }, [msgs, hydrated]);
 
   useEffect(() => {
     end.current?.scrollIntoView({ behavior: 'smooth' });
@@ -72,13 +93,19 @@ export default function Chat() {
     const handle = () => {
       if (sessionStorage.getItem('sis_reset_chat')) {
         sessionStorage.removeItem('sis_reset_chat');
+        sessionStorage.removeItem('sis_chat_history');
+        epochRef.current += 1;
+        busyRef.current = false;
+        setBusy(false);
         setMsgs([]);
         setInput('');
       }
-      const q = sessionStorage.getItem('sis_pending_q');
-      if (q) {
-        sessionStorage.removeItem('sis_pending_q');
-        kirim(q);
+      if (!busyRef.current) {
+        const q = sessionStorage.getItem('sis_pending_q');
+        if (q) {
+          sessionStorage.removeItem('sis_pending_q');
+          kirim(q);
+        }
       }
     };
     handle();
@@ -88,15 +115,17 @@ export default function Chat() {
   }, []);
 
   async function kirim(pesan: string) {
-    if (!pesan.trim() || busyRef.current) return;
+    const textKirim = pesan.trim().slice(0, MAX_PESAN);
+    if (!textKirim || busyRef.current) return;
     busyRef.current = true;
-    const textKirim = pesan.trim();
+    const myEpoch = epochRef.current;
     setMsgs((m) => [...m, { role: 'user', text: textKirim }]);
     setInput('');
     setBusy(true);
 
     try {
       const r = await api('/chat', { method: 'POST', body: { pesan: textKirim } });
+      if (epochRef.current !== myEpoch) return;
       setMsgs((m) => [
         ...m,
         {
@@ -107,14 +136,21 @@ export default function Chat() {
           sensitif: r.sensitif,
           mode: r.mode,
           butuh_klarifikasi: r.butuh_klarifikasi,
-          contoh: r.contoh
-        }
+          contoh: r.contoh,
+        },
       ]);
     } catch (e) {
-      setMsgs((m) => [...m, { role: 'ai', text: (e as Error).message }]);
+      if (epochRef.current !== myEpoch) return;
+      setMsgs((m) => [...m, { role: 'ai', text: (e as Error).message, isError: true }]);
     } finally {
-      busyRef.current = false;
-      setBusy(false);
+      if (epochRef.current === myEpoch) {
+        busyRef.current = false;
+        setBusy(false);
+        // Proses topik populer yang sempat diklik saat sedang sibuk
+        if (typeof window !== 'undefined' && sessionStorage.getItem('sis_pending_q')) {
+          setTimeout(() => window.dispatchEvent(new Event('sis-chat')), 0);
+        }
+      }
     }
   }
 
@@ -127,9 +163,18 @@ export default function Chat() {
     <div className="flex h-full flex-col justify-between">
       {/* Scrollable messages / welcome container */}
       <div className="flex-1 overflow-y-auto pb-4">
-        {msgs.length === 0 ? (
-          /* HERO WELCOME SCREEN (Sesuai Frame 13:2 Figma) */
+        {!hydrated ? null : msgs.length === 0 ? (
+          /* HERO WELCOME SCREEN */
           <div className="mx-auto flex max-w-3xl flex-col items-center justify-center pt-8 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-200">
+              <Sparkles className="h-6 w-6" />
+            </div>
+            <h2 className="mt-4 text-xl font-bold tracking-tight text-slate-900">
+              AI School Assistant
+            </h2>
+            <p className="mt-1.5 max-w-lg text-sm text-slate-500">
+              Tanyakan jadwal pelajaran, nilai KKM, rekap kehadiran, atau penempatan PKL siswa SMKN 4 Bandung.
+            </p>
 
             {/* Suggested cards */}
             <div className="mt-8 grid w-full grid-cols-1 gap-3.5 text-left sm:grid-cols-3">
@@ -138,8 +183,10 @@ export default function Chat() {
                 return (
                   <button
                     key={idx}
+                    type="button"
+                    disabled={busy}
                     onClick={() => kirim(s.prompt)}
-                    className="group flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm transition-all hover:border-blue-300 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
+                    className="group flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm transition-all hover:border-blue-300 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <div>
                       <div className="flex items-center justify-between">
@@ -167,19 +214,27 @@ export default function Chat() {
             {msgs.map((m, i) => (
               <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {m.role === 'ai' && (
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-sm shadow-blue-200">
-                    <Sparkles className="h-4 w-4" />
+                  <div
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-sm ${
+                      m.isError
+                        ? 'bg-rose-100 text-rose-600'
+                        : 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-blue-200'
+                    }`}
+                  >
+                    {m.isError ? <AlertCircle className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
                   </div>
                 )}
 
                 <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                  className={`min-w-0 max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                     m.role === 'user'
                       ? 'bg-blue-600 text-white shadow-sm'
+                      : m.isError
+                      ? 'border border-rose-200 bg-rose-50 text-rose-800 shadow-sm'
                       : 'border border-slate-200 bg-white text-slate-800 shadow-sm'
                   }`}
                 >
-                  <p className="whitespace-pre-wrap">{m.text}</p>
+                  <p className="whitespace-pre-wrap break-words">{m.text}</p>
 
                   {/* Sensitif alert */}
                   {m.sensitif && (
@@ -200,19 +255,24 @@ export default function Chat() {
                   {m.contoh && m.contoh.length > 0 && (
                     <div className="mt-2.5 flex flex-wrap gap-1.5">
                       {m.contoh.map((c, k) => (
-                        <button key={k} onClick={() => kirim(c)} className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] text-blue-700 hover:bg-blue-100">
+                        <button
+                          key={k}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => kirim(c)}
+                          className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] text-blue-700 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
                           {c}
                         </button>
                       ))}
                     </div>
                   )}
 
-                  {/* Sumber data & Mode */}
+                  {/* Sumber data */}
                   {m.sumber && m.sumber.length > 0 && (
                     <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-slate-400">
                       <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
                       <span>Sumber: {m.sumber.join(', ')}</span>
-                      {m.mode && <span className="text-slate-300">• mode {m.mode}</span>}
                     </div>
                   )}
                 </div>
@@ -232,7 +292,7 @@ export default function Chat() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-blue-600 animate-ping"></span>
-                  <span className="text-xs text-slate-500">Memproses pertanyaan dengan Hybrid Engine…</span>
+                  <span className="text-xs text-slate-500">Sedang mencari data…</span>
                 </div>
               </div>
             )}
@@ -241,7 +301,7 @@ export default function Chat() {
         )}
       </div>
 
-      {/* FLOATING COMPOSER AREA (Sesuai Frame 13:2) */}
+      {/* FLOATING COMPOSER AREA */}
       <div className="mx-auto w-full max-w-3xl pt-2">
         <form
           onSubmit={submit}
@@ -249,6 +309,7 @@ export default function Chat() {
         >
           <textarea
             rows={2}
+            maxLength={MAX_PESAN}
             className="w-full resize-none bg-transparent text-sm text-slate-800 placeholder-slate-400 focus:outline-none"
             placeholder="Tanyakan apa saja seputar data sekolah, siswa, nilai, kehadiran, atau PKL..."
             value={input}
@@ -263,7 +324,15 @@ export default function Chat() {
 
           <div className="flex items-center justify-between border-t border-slate-100 pt-2">
             <div className="flex items-center gap-2">
-              
+              {input.length >= 400 && (
+                <span
+                  className={`text-[11px] font-medium ${
+                    input.length >= MAX_PESAN ? 'text-rose-600' : 'text-amber-600'
+                  }`}
+                >
+                  {input.length}/{MAX_PESAN}
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -279,7 +348,7 @@ export default function Chat() {
           </div>
         </form>
 
-        {/* AI Privacy Disclaimer (Sesuai Figma) */}
+        {/* AI Privacy Disclaimer */}
         <div className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11px] text-slate-400">
           <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
           <span>Privat untuk SMKN 4 Bandung. AI dapat melakukan kesalahan, mohon verifikasi data penting di halaman data.</span>

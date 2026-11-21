@@ -25,6 +25,11 @@ def ensure_schema(conn, reset: bool = False) -> None:
             for name in ("01_schema.sql", "02_system.sql"):
                 cur.execute((SQL_DIR / name).read_text(encoding="utf-8"))
             print("Skema dibuat.")
+        if table_exists(cur, "users"):
+            # Migrasi idempoten untuk volume DB lama: pencabutan JWT persisten + keunikan username case-insensitive
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 1")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_exempt_jti VARCHAR(64)")
+            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_username_lower ON users (LOWER(username))")
     conn.commit()
 
 

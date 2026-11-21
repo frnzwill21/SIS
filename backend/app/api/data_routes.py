@@ -43,6 +43,10 @@ def jadwal_kelas(kode: str, hari: str = "", conn: Connection = Depends(get_conn)
     return {"data": _rows(conn, queries.JADWAL_KELAS, kelas=kode, hari=hari)}
 
 
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @router.get("/siswa")
 def cari_siswa(
     q: str = "",
@@ -51,7 +55,7 @@ def cari_siswa(
     page_size: int = Query(25, ge=1, le=100),
     conn: Connection = Depends(get_conn),
 ):
-    q = q.strip()
+    q = _escape_like(q.strip())
     total = conn.execute(text(queries.SISWA_SEARCH_COUNT), {"q": q, "kelas": kelas}).scalar_one()
     data = _rows(conn, queries.SISWA_SEARCH, q=q, kelas=kelas, limit=page_size, offset=(page - 1) * page_size)
     return {"data": data, "meta": {"page": page, "page_size": page_size, "total": total}}
@@ -113,7 +117,7 @@ def daftar_ekskul(conn: Connection = Depends(get_conn)):
 
 @router.get("/guru")
 def cari_guru(q: str = "", conn: Connection = Depends(get_conn)):
-    return {"data": _rows(conn, queries.GURU_SEARCH, q=q.strip())}
+    return {"data": _rows(conn, queries.GURU_SEARCH, q=_escape_like(q.strip()))}
 
 
 @router.get("/guru/{nip}/jadwal")

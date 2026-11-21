@@ -10,6 +10,7 @@ import re
 
 from . import gemini
 from .parsing import (
+    mentions_unknown_kelas,
     normalize_kelas,
     parse_ambang,
     parse_hari,
@@ -72,7 +73,7 @@ def rule_intent(pesan: str) -> dict:
     if _has(low, r"\bwali\b"):
         return out("info_wali_kelas")
     if _has(low, r"\bjadwal\b|\bmengajar\b"):
-        return out("jadwal_kelas" if kelas else "jadwal_guru")
+        return out("jadwal_kelas" if (kelas or mentions_unknown_kelas(pesan)) else "jadwal_guru")
     if _has(low, r"\bpkl\b|magang|prakerin"):
         return out("penempatan_pkl")
     if _has(low, r"ekskul|ekstrakurikuler|\bekstra\b|organisasi"):
@@ -84,8 +85,12 @@ def rule_intent(pesan: str) -> dict:
     if _has(low, r"pelanggaran|melanggar|\bpoin\b"):
         return out("pelanggaran_siswa")
     if _has(low, r"\balpha\b|\balpa\b|bolos"):
-        params["ambang"] = parse_ambang(pesan)
-        return out("siswa_alpha_tinggi")
+        if _has(low, r"lebih dari|di atas|diatas|minimal|paling sedikit|tinggi|terbanyak|tertinggi|siapa saja|daftar|sering|>=|>|\d+\s*hari|atau lebih"):
+            ambang = parse_ambang(pesan, default=0)
+            if ambang:
+                params["ambang"] = ambang
+            return out("siswa_alpha_tinggi")
+        return out("rekap_kehadiran")
     if _has(low, r"kehadiran|absensi|presensi|\bhadir\b|\bsakit\b|\bizin\b"):
         return out("rekap_kehadiran")
     if _has(low, r"kkm|remedial|tidak tuntas|belum tuntas|di bawah"):
@@ -96,6 +101,8 @@ def rule_intent(pesan: str) -> dict:
         return out("nilai_siswa")
     if _has(low, r"\bcari\b|\bsiapa\b|profil|biodata|\bdata\b|\binfo"):
         return out("profil_siswa" if not kelas else "cari_siswa")
+    if _has(low, r"^(?:halo|hai|hi|hello|assalamualaikum|selamat\s+(?:pagi|siang|sore|malam)|terima\s+kasih|makasih|thanks|ok|oke|tes|test|apa\s+kabar)\b"):
+        return out("tidak_dikenali")
     return out("profil_siswa")
 
 
@@ -113,7 +120,6 @@ def _system_prompt() -> str:
 
 _TEXT_KEYS = ("siswa", "guru", "perusahaan", "ekskul", "topik", "mapel", "hari", "kelas")
 _GROUNDED = ("kelas", "semester", "ambang", "hari", "mapel")  # nilai yang bisa dibaca deterministik dari teks
-_HARI = {"senin", "selasa", "rabu", "kamis", "jumat", "sabtu"}
 
 
 def _clean_params(raw: dict) -> dict:
@@ -181,7 +187,9 @@ def understand(pesan: str) -> tuple[dict, str]:
         elif key == "mapel":  # Gemini cenderung menulis nama mapel; query butuh kodenya
             cand = parse_mapel(str(cand), params.get("kelas", ""), parse_jurusan(pesan))
         elif key == "hari":
-            cand = cand if isinstance(cand, str) and cand.lower() in _HARI and cand.lower() in low else ""
+            norm = parse_hari(cand) if isinstance(cand, str) else ""
+            grounded = bool(norm) and (norm.lower() in low or (norm == "Jumat" and "jum'at" in low))
+            cand = norm if grounded else ""
         elif key in ("semester", "ambang"):
             cand = cand if str(cand) in low else None  # angka harus memang tertulis di pertanyaan
         if cand:

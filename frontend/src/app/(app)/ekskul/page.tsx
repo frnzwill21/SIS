@@ -6,10 +6,9 @@ import { useLoad, Status } from '@/components/useLoad';
 export default function Ekskul() {
   const { data, error, loading } = useLoad<{ data: Row[] }>('/ekskul');
   return (
-    <div className="space-y-3">
-      <h1 className="text-lg font-semibold">Ekstrakurikuler</h1>
+    <div className="space-y-4">
       <Status loading={loading} error={error} />
-      <DataTable rows={data?.data ?? []} />
+      {!loading && !error && data != null && <DataTable rows={data.data} />}
     </div>
   );
 }

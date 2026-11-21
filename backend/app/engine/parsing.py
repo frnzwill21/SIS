@@ -5,7 +5,7 @@ JURUSAN_KELAS = {"RPL": 3, "DKV": 2, "TITL": 6, "TOI": 3, "TAV": 3}
 KELAS_VALID = {f"XII-{j}-{n}" for j, c in JURUSAN_KELAS.items() for n in range(1, c + 1)}
 HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat"]
 
-_KELAS_RE = re.compile(r"\b(?:xii[\s-]*)?(rpl|dkv|titl|toi|tav)[\s-]*(\d)\b")
+_KELAS_RE = re.compile(r"\b(?:xii[\s-]*)?(rpl|dkv|titl|toi|tav)[\s-]*(\d+)\b")
 _SCOPE_RE = re.compile(r"\bkelas\s*(?:x|xi|10|11)\b|\b(?:x|xi)[\s-]+(?:rpl|dkv|titl|toi|tav)\b")
 _SEM_RE = re.compile(r"\bsemester\s*(?:ke[\s-]*)?([1-6])\b")
 _HARI_RE = re.compile(r"\b(senin|selasa|rabu|kamis|jum'?at)\b")
@@ -49,16 +49,27 @@ def outside_scope(text: str) -> bool:
     return bool(_SCOPE_RE.search(low)) and "xii" not in low
 
 
+def relative_semester_offset(text: str) -> int | None:
+    """Kembalikan 0 untuk 'semester ini', -1 untuk 'semester lalu', atau None bila tidak relatif/eksplisit."""
+    low = text.lower()
+    if _SEM_RE.search(low):
+        return None
+    if re.search(r"semester\s+(?:ini|sekarang|berjalan)", low):
+        return 0
+    if re.search(r"semester\s+(?:lalu|kemarin|sebelumnya)", low):
+        return -1
+    return None
+
+
 def parse_semester(text: str, current: int = 5) -> int:
     """0 = tidak disebut."""
     low = text.lower()
     m = _SEM_RE.search(low)
     if m:
         return int(m.group(1))
-    if re.search(r"semester\s+(?:ini|sekarang|berjalan)", low):
-        return current
-    if re.search(r"semester\s+(?:lalu|kemarin|sebelumnya)", low):
-        return max(current - 1, 1)
+    offset = relative_semester_offset(low)
+    if offset is not None:
+        return max(current + offset, 1)
     return 0
 
 
@@ -96,6 +107,9 @@ def parse_ambang(text: str, default: int = 5) -> int:
     if m:
         return int(m.group(1))
     m = re.search(r"(\d+)\s*(?:hari)?\s*(?:atau lebih|ke atas)", low)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"(\d+)\s*hari\b", low)
     if m:
         return int(m.group(1))
     return default

@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .api import admin_routes, auth_routes, chat_routes, data_routes
+from .api import admin_routes, auth_routes, chat_routes, data_routes, oracle_routes
 from .config import settings
 from .db import engine
 
@@ -44,6 +44,7 @@ app.include_router(auth_routes.router, prefix=PREFIX)
 app.include_router(data_routes.router, prefix=PREFIX)
 app.include_router(chat_routes.router, prefix=PREFIX)
 app.include_router(admin_routes.router, prefix=PREFIX)
+app.include_router(oracle_routes.router, prefix=PREFIX)
 
 
 # Didaftarkan pada kelas dasar Starlette agar 404/405 bawaan router juga memakai format {error:{...}}
@@ -63,16 +64,22 @@ async def validation_error(_: Request, exc: RequestValidationError):
 
 @app.get(f"{PREFIX}/health", tags=["sistem"])
 def health():
+    tahun_ajaran = "2026/2027"
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+            row = conn.execute(text("SELECT tahun_ajaran FROM periode_akademik WHERE status = 'berjalan' LIMIT 1")).first()
+            if row and row[0]:
+                tahun_ajaran = str(row[0])
         database = "ok"
     except Exception:  # noqa: BLE001 - status saja, tanpa membocorkan detail
         database = "error"
     return {
         "status": "ok" if database == "ok" else "degraded",
         "database": database,
+        "tahun_ajaran": tahun_ajaran,
         "rag": "pencarian leksikal (profil_sekolah.json)",
         "gemini": "aktif" if settings.gemini_api_key else "tidak aktif (mode aturan)",
         "gemini_kirim_data": bool(settings.gemini_api_key and settings.gemini_send_data),
+        "oracle_public": settings.oracle_allow_anon,
     }

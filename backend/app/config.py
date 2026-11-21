@@ -45,9 +45,15 @@ class Settings:
     # Teks pertanyaan guru untuk klasifikasi intent tetap dikirim selama GEMINI_API_KEY terisi.
     gemini_send_data: bool = _flag("GEMINI_SEND_DATA", "0")
     chat_rate_per_minute: int = int(os.environ.get("CHAT_RATE_PER_MINUTE", "20"))
+    login_rate_per_minute: int = int(os.environ.get("LOGIN_RATE_PER_MINUTE", "10"))
     dataset_dir: str = os.environ.get(
         "DATASET_DIR", str(Path(__file__).resolve().parents[2] / "database" / "dataset_bersih")
     )
+    oracle_ords_base_url: str = os.environ.get(
+        "ORACLE_ORDS_BASE_URL", "https://iacademy.oracle.com/ords/id_b885_plsql_s69/api/v1"
+    ).rstrip("/")
+    # Default MATI (wajib login). Aktifkan =1 hanya saat pengujian lokal tanpa PostgreSQL.
+    oracle_allow_anon: bool = _flag("ORACLE_ALLOW_ANON", "0")
 
 
 if "ganti-dengan" in Settings.database_url:

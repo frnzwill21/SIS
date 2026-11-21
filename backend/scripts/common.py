@@ -30,7 +30,7 @@ EXPECTED_ROWS = {
     "jurusan": 5, "guru": 47, "mapel_jadwal": 13, "mapel_rapor": 26, "periode_akademik": 6,
     "jenis_pelanggaran": 25, "predikat_ekskul": 5, "sesi_pkl": 2, "kelas": 17, "guru_mapel": 51,
     "pemetaan_mapel": 9, "siswa": 612, "ekstrakurikuler": 19, "pembina_ekskul": 36,
-    "perusahaan_pkl": 39, "nilai": 48384, "kehadiran": 3672, "pelanggaran": 286,
+    "perusahaan_pkl": 39, "nilai": 48384, "kehadiran": 3672, "pelanggaran": 473,
     "partisipasi_ekskul": 1978, "jadwal_pelajaran": 227, "penempatan_pkl": 612,
 }
 

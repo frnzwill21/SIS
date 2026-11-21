@@ -1,18 +1,19 @@
 """Endpoint khusus admin: akun, audit log, riwayat impor."""
 import re
-from datetime import date
-from typing import Literal
+from datetime import date, datetime, timedelta, timezone
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import IntegrityError
 
 from .. import queries
-from ..auth import hash_password, new_password, require_admin
+from ..auth import bump_token_version, hash_password, new_password, require_admin, revoke_user_tokens
 from ..db import get_conn
 
 router = APIRouter(tags=["admin"], dependencies=[Depends(require_admin)])
+WIB = timezone(timedelta(hours=7))
 
 
 def _audit(conn: Connection, admin: dict, aksi: str, detail: str) -> None:
@@ -25,10 +26,18 @@ def _err(code: int, kode: str, pesan: str) -> HTTPException:
 
 
 class UserIn(BaseModel):
-    username: str = Field(min_length=3, max_length=50)
-    nama: str = Field(min_length=1, max_length=120)
+    username: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=50)]
+    nama: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
     role: Literal["admin", "teacher"]
     nip: str | None = Field(default=None, max_length=30)
+
+    @field_validator("nip", mode="before")
+    @classmethod
+    def _clean_nip(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            return v or None
+        return v
 
 
 class UserPatch(BaseModel):
@@ -68,23 +77,52 @@ def ubah_user(user_id: int, body: UserPatch, response: Response, admin: dict = D
     target = conn.execute(text(queries.USER_BY_ID), {"id": user_id}).mappings().first()
     if not target:
         raise _err(404, "NOT_FOUND", "Akun tidak ditemukan.")
+    if body.reset_password and target["id"] == admin["id"]:
+        raise _err(409, "CONFLICT", "Gunakan Pengaturan Akun (/akun) untuk mengganti kata sandi Anda sendiri.")
     out: dict = {"id": user_id}
     if body.aktif is False:
         if target["id"] == admin["id"]:
             raise _err(409, "CONFLICT", "Tidak bisa menonaktifkan akun Anda sendiri.")
-        if target["role"] == "admin" and conn.execute(text(queries.ADMIN_AKTIF_LAIN), {"id": user_id}).scalar_one() == 0:
-            raise _err(409, "CONFLICT", "Tidak bisa menonaktifkan admin aktif terakhir.")
+        if target["role"] == "admin":
+            if conn.dialect.name == "postgresql":
+                active_ids = [r[0] for r in conn.execute(text(queries.ADMIN_AKTIF_LOCK)).all()]
+                other_admins = sum(1 for uid in active_ids if uid != user_id)
+            else:
+                other_admins = conn.execute(text(queries.ADMIN_AKTIF_LAIN), {"id": user_id}).scalar_one()
+            if other_admins == 0:
+                raise _err(409, "CONFLICT", "Tidak bisa menonaktifkan admin aktif terakhir.")
     if body.aktif is not None:
         conn.execute(text(queries.USER_UPDATE_AKTIF), {"aktif": body.aktif, "id": user_id})
+        if body.aktif is False:
+            bump_token_version(conn, user_id)
+            revoke_user_tokens(user_id)
         out["aktif"] = body.aktif
         _audit(conn, admin, "admin_ubah_aktif", f"user_id={user_id} aktif={body.aktif}")
     if body.reset_password:
         response.headers["Cache-Control"] = "no-store"
         password = new_password()
         conn.execute(text(queries.USER_RESET_PASSWORD), {"hash": hash_password(password), "id": user_id})
+        bump_token_version(conn, user_id)
+        revoke_user_tokens(user_id)
         out["password_baru"] = password
         _audit(conn, admin, "admin_reset_password", f"user_id={user_id}")
     return out
+
+
+def _wib_bounds(dari: date | None, sampai: date | None, is_pg: bool):
+    """Konversi tanggal filter WIB (Asia/Jakarta) ke batas setengah-terbuka [dari, sampai+1)."""
+    dari_dt = datetime(dari.year, dari.month, dari.day, 0, 0, 0, tzinfo=WIB) if dari else None
+    sampai_dt = (
+        datetime(sampai.year, sampai.month, sampai.day, 0, 0, 0, tzinfo=WIB) + timedelta(days=1)
+        if sampai
+        else None
+    )
+    if is_pg:
+        return dari_dt, sampai_dt
+    return (
+        dari_dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S") if dari_dt else None,
+        sampai_dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S") if sampai_dt else None,
+    )
 
 
 @router.get("/admin/audit")
@@ -97,9 +135,13 @@ def audit(
     page_size: int = Query(50, ge=1, le=200),
     conn: Connection = Depends(get_conn),
 ):
-    f = {"username": (user or username).strip(), "dari": dari, "sampai": sampai}
-    rows = conn.execute(text(queries.AUDIT_LIST), {**f, "limit": page_size, "offset": (page - 1) * page_size}).mappings().all()
-    total = conn.execute(text(queries.AUDIT_COUNT), f).scalar_one()
+    is_pg = conn.dialect.name == "postgresql"
+    dari_bound, sampai_bound = _wib_bounds(dari, sampai, is_pg)
+    f = {"username": (user or username).strip(), "dari": dari_bound, "sampai": sampai_bound}
+    list_sql = queries.AUDIT_LIST if is_pg else queries.AUDIT_LIST_GENERIC
+    count_sql = queries.AUDIT_COUNT if is_pg else queries.AUDIT_COUNT_GENERIC
+    rows = conn.execute(text(list_sql), {**f, "limit": page_size, "offset": (page - 1) * page_size}).mappings().all()
+    total = conn.execute(text(count_sql), f).scalar_one()
     return {"data": [dict(r) for r in rows], "meta": {"page": page, "page_size": page_size, "total": total}}
 
 

@@ -9,8 +9,11 @@ CREATE TABLE users (
     password_hash         TEXT NOT NULL,
     wajib_ganti_password  BOOLEAN NOT NULL DEFAULT TRUE,
     aktif                 BOOLEAN NOT NULL DEFAULT TRUE,
+    token_version         INTEGER NOT NULL DEFAULT 1,
+    token_exempt_jti      VARCHAR(64),
     dibuat_pada           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX uq_users_username_lower ON users (LOWER(username));
 
 CREATE TABLE audit_log (
     id             BIGSERIAL PRIMARY KEY,

@@ -7,11 +7,32 @@ export function useLoad<T = any>(path: string | null) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(!!path);
   useEffect(() => {
-    if (!path) return;
+    if (!path) {
+      setData(null);
+      setError('');
+      setLoading(false);
+      return;
+    }
     let alive = true;
-    setLoading(true); setError('');
-    api<T>(path).then((d) => alive && setData(d)).catch((e) => alive && setError(e.message)).finally(() => alive && setLoading(false));
-    return () => { alive = false; };
+    setLoading(true);
+    setError('');
+    setData(null);
+    api<T>(path)
+      .then((d) => {
+        if (alive) setData(d);
+      })
+      .catch((e) => {
+        if (alive) {
+          setData(null);
+          setError((e as Error).message);
+        }
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
   }, [path]);
   return { data, error, loading };
 }

@@ -7,7 +7,7 @@ from . import handlers
 from .compose import compose
 from .core import Db, Result
 from .intents import CONTOH, understand
-from .parsing import mentions_unknown_kelas, outside_scope
+from .parsing import mentions_unknown_kelas, outside_scope, relative_semester_offset
 
 log = logging.getLogger("uvicorn.error")
 
@@ -32,6 +32,9 @@ def answer(open_db: OpenDb, pesan: str) -> dict:
     galat = False
     try:
         with open_db() as db:  # koneksi hanya selama handler berjalan
+            rel_sem = relative_semester_offset(pesan)
+            if rel_sem is not None and intent["intent"] not in ("tidak_dikenali",):
+                intent["params"]["semester"] = max(handlers._sem_berjalan(db) + rel_sem, 1)
             result = handlers.run(db, intent, pesan)
     except Exception:  # noqa: BLE001 - satu intent rusak tidak boleh menjatuhkan seluruh request
         log.exception("Handler gagal (intent=%s)", intent.get("intent"))

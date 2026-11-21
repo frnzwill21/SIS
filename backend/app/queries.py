@@ -21,7 +21,10 @@ FROM siswa WHERE kelas_kode = :kelas ORDER BY no_absen
 KELAS_EXISTS = "SELECT 1 FROM kelas WHERE kode = :kelas"
 
 SISWA_SEARCH_WHERE = """
-WHERE (CAST(:q AS TEXT) = '' OR s.nama ILIKE '%' || CAST(:q AS TEXT) || '%' OR s.nis LIKE CAST(:q AS TEXT) || '%')
+WHERE (CAST(:q AS TEXT) = ''
+       OR s.nama ILIKE '%' || CAST(:q AS TEXT) || '%' ESCAPE '\\'
+       OR s.nis LIKE CAST(:q AS TEXT) || '%' ESCAPE '\\'
+       OR s.nisn LIKE CAST(:q AS TEXT) || '%' ESCAPE '\\')
   AND (CAST(:kelas AS TEXT) = '' OR s.kelas_kode = CAST(:kelas AS TEXT))
 """
 
@@ -29,7 +32,7 @@ SISWA_SEARCH_COUNT = "SELECT COUNT(*) FROM siswa s " + SISWA_SEARCH_WHERE
 
 SISWA_SEARCH = (
     """
-SELECT s.nis, s.nama, s.jenis_kelamin, s.no_absen, s.kelas_kode, k.nama AS kelas
+SELECT s.nis, s.nisn, s.nama, s.jenis_kelamin, s.no_absen, s.kelas_kode, k.nama AS kelas
 FROM siswa s JOIN kelas k ON k.kode = s.kelas_kode
 """
     + SISWA_SEARCH_WHERE
@@ -85,10 +88,10 @@ WHERE k.nis = :nis ORDER BY k.semester
 """
 
 SISWA_PELANGGARAN = """
-SELECT pl.id, jp.kode, jp.nama AS pelanggaran, jp.tingkat, pl.frekuensi, pl.total_poin,
-       pl.tanggal_terakhir, pl.tindak_lanjut
+SELECT pl.id, jp.kode, jp.nama AS pelanggaran, jp.tingkat, jp.poin,
+       pl.tanggal_kejadian, COALESCE(NULLIF(TRIM(pl.catatan), ''), jp.sanksi_disarankan) AS tindak_lanjut
 FROM pelanggaran pl JOIN jenis_pelanggaran jp ON jp.kode = pl.kode_pelanggaran
-WHERE pl.nis = :nis ORDER BY pl.tanggal_terakhir DESC
+WHERE pl.nis = :nis ORDER BY pl.tanggal_kejadian DESC, pl.id DESC
 """
 
 JADWAL_KELAS = """
@@ -103,16 +106,39 @@ ORDER BY CASE j.hari WHEN 'Senin' THEN 1 WHEN 'Selasa' THEN 2 WHEN 'Rabu' THEN 3
 
 USER_BY_USERNAME = """
 SELECT id, username, nama, nip, role, password_hash, wajib_ganti_password, aktif
-FROM users WHERE username = :username
+FROM users WHERE LOWER(username) = LOWER(:username)
+"""
+
+USER_BY_USERNAME_TV = """
+SELECT id, username, nama, nip, role, password_hash, wajib_ganti_password, aktif, token_version
+FROM users WHERE LOWER(username) = LOWER(:username)
 """
 
 USER_BY_ID = "SELECT id, username, nama, nip, role, wajib_ganti_password, aktif FROM users WHERE id = :id"
+USER_BY_ID_TV = (
+    "SELECT id, username, nama, nip, role, wajib_ganti_password, aktif, token_version, token_exempt_jti "
+    "FROM users WHERE id = :id"
+)
+USER_BY_ID_TV_ONLY = (
+    "SELECT id, username, nama, nip, role, wajib_ganti_password, aktif, token_version "
+    "FROM users WHERE id = :id"
+)
+USER_AUTH_BY_ID = "SELECT id, username, password_hash, aktif FROM users WHERE id = :id"
 
 USER_SET_PASSWORD = "UPDATE users SET password_hash = :hash, wajib_ganti_password = FALSE WHERE id = :id"
+USER_BUMP_TOKEN_VERSION = (
+    "UPDATE users SET token_version = token_version + 1, token_exempt_jti = :exempt_jti WHERE id = :id"
+)
+USER_BUMP_TOKEN_VERSION_ONLY = "UPDATE users SET token_version = token_version + 1 WHERE id = :id"
 
 AUDIT_INSERT = """
 INSERT INTO audit_log (user_id, aksi, pertanyaan, tabel_diakses, status)
 VALUES (:user_id, :aksi, :pertanyaan, :tabel, 'ok')
+"""
+
+AUDIT_INSERT_STATUS = """
+INSERT INTO audit_log (user_id, aksi, pertanyaan, tabel_diakses, status)
+VALUES (:user_id, :aksi, :pertanyaan, :tabel, :status)
 """
 
 # ---------------------------------------------------------------- tambahan untuk Hybrid Query Engine
@@ -121,12 +147,14 @@ PERIODE_BERJALAN = "SELECT semester FROM periode_akademik WHERE status = 'berjal
 SISWA_FIND = """
 SELECT s.nis, s.nama, s.no_absen, k.nama AS kelas, s.kelas_kode
 FROM siswa s JOIN kelas k ON k.kode = s.kelas_kode
-WHERE s.nama ILIKE '%' || CAST(:q AS TEXT) || '%' OR s.nis = CAST(:q AS TEXT)
+WHERE s.nama ILIKE '%' || CAST(:q AS TEXT) || '%'
+   OR s.nis = CAST(:q AS TEXT)
+   OR s.nisn = CAST(:q AS TEXT)
 ORDER BY s.nama LIMIT 50
 """
 
 GURU_SEARCH = """
-SELECT nip, nama FROM guru WHERE nama ILIKE '%' || CAST(:q AS TEXT) || '%' ORDER BY nama LIMIT 6
+SELECT nip, nama FROM guru WHERE nama ILIKE '%' || CAST(:q AS TEXT) || '%' ESCAPE '\\' ORDER BY nama LIMIT 50
 """
 
 KELAS_BY_WALI = """
@@ -174,11 +202,12 @@ GROUP BY k.semester ORDER BY k.semester
 """
 
 PELANGGARAN_KELAS = """
-SELECT s.nama, jp.nama AS pelanggaran, jp.tingkat, pl.frekuensi, pl.total_poin, pl.tanggal_terakhir
+SELECT s.nama, jp.nama AS pelanggaran, jp.tingkat, jp.poin, pl.tanggal_kejadian,
+       COALESCE(NULLIF(TRIM(pl.catatan), ''), jp.sanksi_disarankan) AS tindak_lanjut
 FROM pelanggaran pl
 JOIN siswa s ON s.nis = pl.nis
 JOIN jenis_pelanggaran jp ON jp.kode = pl.kode_pelanggaran
-WHERE s.kelas_kode = :kelas ORDER BY pl.total_poin DESC, s.nama
+WHERE s.kelas_kode = :kelas ORDER BY pl.tanggal_kejadian DESC, jp.poin DESC, s.nama
 """
 
 JADWAL_GURU = """
@@ -247,19 +276,36 @@ AUDIT_LIST = """
 SELECT a.id, a.waktu, u.username, a.aksi, a.pertanyaan, a.tabel_diakses, a.status
 FROM audit_log a LEFT JOIN users u ON u.id = a.user_id
 WHERE (CAST(:username AS TEXT) = '' OR u.username = CAST(:username AS TEXT))
-  AND (CAST(:dari AS DATE) IS NULL OR a.waktu >= CAST(:dari AS DATE))
-  AND (CAST(:sampai AS DATE) IS NULL OR a.waktu < CAST(:sampai AS DATE) + 1)
+  AND (CAST(:dari AS TIMESTAMPTZ) IS NULL OR a.waktu >= CAST(:dari AS TIMESTAMPTZ))
+  AND (CAST(:sampai AS TIMESTAMPTZ) IS NULL OR a.waktu < CAST(:sampai AS TIMESTAMPTZ))
 ORDER BY a.waktu DESC, a.id DESC LIMIT :limit OFFSET :offset
 """
 
 AUDIT_COUNT = """
 SELECT COUNT(*) FROM audit_log a LEFT JOIN users u ON u.id = a.user_id
 WHERE (CAST(:username AS TEXT) = '' OR u.username = CAST(:username AS TEXT))
-  AND (CAST(:dari AS DATE) IS NULL OR a.waktu >= CAST(:dari AS DATE))
-  AND (CAST(:sampai AS DATE) IS NULL OR a.waktu < CAST(:sampai AS DATE) + 1)
+  AND (CAST(:dari AS TIMESTAMPTZ) IS NULL OR a.waktu >= CAST(:dari AS TIMESTAMPTZ))
+  AND (CAST(:sampai AS TIMESTAMPTZ) IS NULL OR a.waktu < CAST(:sampai AS TIMESTAMPTZ))
+"""
+
+AUDIT_LIST_GENERIC = """
+SELECT a.id, a.waktu, u.username, a.aksi, a.pertanyaan, a.tabel_diakses, a.status
+FROM audit_log a LEFT JOIN users u ON u.id = a.user_id
+WHERE (:username = '' OR u.username = :username)
+  AND (:dari IS NULL OR a.waktu >= :dari)
+  AND (:sampai IS NULL OR a.waktu < :sampai)
+ORDER BY a.waktu DESC, a.id DESC LIMIT :limit OFFSET :offset
+"""
+
+AUDIT_COUNT_GENERIC = """
+SELECT COUNT(*) FROM audit_log a LEFT JOIN users u ON u.id = a.user_id
+WHERE (:username = '' OR u.username = :username)
+  AND (:dari IS NULL OR a.waktu >= :dari)
+  AND (:sampai IS NULL OR a.waktu < :sampai)
 """
 
 ADMIN_AKTIF_LAIN = "SELECT COUNT(*) FROM users WHERE role = 'admin' AND aktif AND id <> :id"
+ADMIN_AKTIF_LOCK = "SELECT id FROM users WHERE role = 'admin' AND aktif FOR UPDATE"
 
 IMPORT_LIST = "SELECT id, waktu, dijalankan_oleh, nama_file, jumlah_baris, status FROM import_batch ORDER BY waktu DESC LIMIT 50"
 

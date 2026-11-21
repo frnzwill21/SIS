@@ -13,4 +13,8 @@ ref/
 *.pytest_cache/
 backend/.pytest_cache/
 repomix-output.xml
+repomix.config.json
+struktur.txt
+/package-lock.json
+gemini api.txt
 

@@ -52,6 +52,8 @@ def _satu_siswa(db: Db, p: dict, pesan: str) -> tuple[dict | None, Result | None
 
 # ------------------------------------------------------------------ siswa
 def cari_siswa(db: Db, p: dict, pesan: str) -> Result:
+    if not p.get("kelas") and mentions_unknown_kelas(pesan):
+        return _kelas_wajib(p, pesan, "daftar siswa")
     if p.get("kelas") and not (p.get("siswa") or resolver.find_siswa_in_text(db, pesan)):
         rows = db.rows(queries.KELAS_SISWA, kelas=p["kelas"])
         kolom, baris = table_from(rows, [("no_absen", "No"), ("nis", "NIS"), ("nama", "Nama"), ("jenis_kelamin", "L/P")])
@@ -67,6 +69,8 @@ def cari_siswa(db: Db, p: dict, pesan: str) -> Result:
 def profil_siswa(db: Db, p: dict, pesan: str) -> Result:
     s, ask = _satu_siswa(db, p, pesan)
     if ask:
+        if not ask.baris and not re.search(r"\b(profil|biodata|siapa|cari|siswa|murid|nis|nisn|data|info)\b|\b\d{6,10}\b", pesan.lower()):
+            return tidak_dikenali(db, p, pesan)
         return ask
     d = db.rows(queries.SISWA_DETAIL, nis=s["nis"])[0]
     pkl = (db.rows(queries.SISWA_PKL, nis=s["nis"]) or [None])[0]
@@ -157,6 +161,8 @@ def siswa_di_bawah_kkm(db: Db, p: dict, pesan: str) -> Result:
 
 # ------------------------------------------------------------------ kehadiran
 def rekap_kehadiran(db: Db, p: dict, pesan: str) -> Result:
+    if not p.get("kelas") and mentions_unknown_kelas(pesan):
+        return _kelas_wajib(p, pesan, "rekap kehadiran")
     sem = int(p.get("semester") or 0)
     has_name = bool(resolver.find_siswa_in_text(db, pesan, p.get("siswa")))
     if has_name or not p.get("kelas"):
@@ -180,6 +186,10 @@ def rekap_kehadiran(db: Db, p: dict, pesan: str) -> Result:
 def siswa_alpha_tinggi(db: Db, p: dict, pesan: str) -> Result:
     if not p.get("kelas") and mentions_unknown_kelas(pesan):
         return _kelas_wajib(p, pesan, "daftar siswa dengan alpha tinggi")
+    low = pesan.lower()
+    has_threshold = bool(re.search(r"lebih dari|di atas|diatas|minimal|paling sedikit|tinggi|terbanyak|tertinggi|siapa saja|daftar|sering|>=|>|\d+\s*hari|atau lebih", low))
+    if not has_threshold and resolver.find_siswa_in_text(db, pesan, p.get("siswa")):
+        return rekap_kehadiran(db, p, pesan)
     sem = int(p.get("semester") or _sem_berjalan(db))
     ambang = int(p.get("ambang") or 5)
     rows = db.rows(queries.ALPHA_TINGGI, semester=sem, ambang=ambang, kelas=p.get("kelas") or "")
@@ -194,13 +204,15 @@ def siswa_alpha_tinggi(db: Db, p: dict, pesan: str) -> Result:
 
 # ------------------------------------------------------------------ pelanggaran (sensitif)
 def pelanggaran_siswa(db: Db, p: dict, pesan: str) -> Result:
+    if not p.get("kelas") and mentions_unknown_kelas(pesan):
+        return _kelas_wajib(p, pesan, "catatan pelanggaran")
     if p.get("kelas") and not resolver.find_siswa_in_text(db, pesan, p.get("siswa")):
         rows = db.rows(queries.PELANGGARAN_KELAS, kelas=p["kelas"])
         nama = p["kelas"].replace("-", " ")
         if not rows:
             return Result(f"Tidak ada catatan pelanggaran di {nama}.", sumber=["pelanggaran"], sensitif=True)
         kolom, baris = table_from(rows, [("nama", "Nama"), ("pelanggaran", "Pelanggaran"), ("tingkat", "Tingkat"),
-                                        ("frekuensi", "Frekuensi"), ("total_poin", "Total poin"), ("tanggal_terakhir", "Terakhir")])
+                                        ("poin", "Poin"), ("tanggal_kejadian", "Tanggal")])
         return Result(f"Ada {len(rows)} catatan pelanggaran di {nama}. Data ini sensitif; gunakan seperlunya untuk pembinaan.",
                       kolom, baris, ["pelanggaran", "jenis_pelanggaran", "siswa"], sensitif=True)
     s, ask = _satu_siswa(db, p, pesan)
@@ -209,9 +221,9 @@ def pelanggaran_siswa(db: Db, p: dict, pesan: str) -> Result:
     rows = db.rows(queries.SISWA_PELANGGARAN, nis=s["nis"])
     if not rows:
         return Result(f"Tidak ada catatan pelanggaran untuk {s['nama']} ({s['kelas']}).", sumber=["pelanggaran"], sensitif=True)
-    kolom, baris = table_from(rows, [("pelanggaran", "Pelanggaran"), ("tingkat", "Tingkat"), ("frekuensi", "Frekuensi"),
-                                    ("total_poin", "Total poin"), ("tanggal_terakhir", "Terakhir"), ("tindak_lanjut", "Tindak lanjut")])
-    total = sum(r["total_poin"] for r in rows)
+    kolom, baris = table_from(rows, [("pelanggaran", "Pelanggaran"), ("tingkat", "Tingkat"), ("poin", "Poin"),
+                                    ("tanggal_kejadian", "Tanggal"), ("tindak_lanjut", "Tindak lanjut")])
+    total = sum(r["poin"] for r in rows)
     return Result(f"{s['nama']} ({s['kelas']}) memiliki {len(rows)} catatan pelanggaran dengan total {total} poin. "
                   "Data ini sensitif; gunakan seperlunya untuk pembinaan.", kolom, baris,
                   ["pelanggaran", "jenis_pelanggaran", "siswa"], sensitif=True)
@@ -238,11 +250,13 @@ def jadwal_kelas(db: Db, p: dict, pesan: str) -> Result:
 
 
 def jadwal_guru(db: Db, p: dict, pesan: str) -> Result:
+    if not p.get("kelas") and mentions_unknown_kelas(pesan):
+        return _kelas_wajib(p, pesan, "jadwal pelajaran")
     guru = resolver.find_guru(db, pesan, p.get("guru"))
     if not guru:
         return _tanya("Guru tidak ditemukan. Tulis nama guru, atau sebut kelasnya untuk melihat jadwal kelas.")
     if len(guru) > 1:
-        kolom, baris = table_from(guru, [("nama", "Nama guru")])
+        kolom, baris = table_from(guru[:10], [("nama", "Nama guru")])
         return Result("Ada beberapa guru yang cocok. Sebutkan nama lengkapnya.", kolom, baris, ["guru"], butuh_klarifikasi=True)
     g = guru[0]
     hari = p.get("hari") or parse_hari(pesan)
@@ -275,6 +289,8 @@ def info_wali_kelas(db: Db, p: dict, pesan: str) -> Result:
 
 # ------------------------------------------------------------------ PKL & ekskul
 def penempatan_pkl(db: Db, p: dict, pesan: str) -> Result:
+    if not p.get("kelas") and mentions_unknown_kelas(pesan):
+        return _kelas_wajib(p, pesan, "penempatan PKL")
     perusahaan = resolver.find_perusahaan(db, pesan, p.get("perusahaan"))
     if perusahaan and not (p.get("siswa") or p.get("kelas")):
         rows = []
