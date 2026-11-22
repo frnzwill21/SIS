@@ -149,12 +149,11 @@ CREATE TABLE pelanggaran (
     id                INTEGER PRIMARY KEY,
     nis               VARCHAR(20) NOT NULL REFERENCES siswa (nis),
     kode_pelanggaran  VARCHAR(10) NOT NULL REFERENCES jenis_pelanggaran (kode),
-    frekuensi         SMALLINT NOT NULL CHECK (frekuensi > 0),
-    total_poin        SMALLINT NOT NULL CHECK (total_poin >= 0),
-    tanggal_terakhir  DATE NOT NULL,
-    tindak_lanjut     TEXT NOT NULL
+    tanggal_kejadian  DATE NOT NULL,
+    catatan           TEXT
 );
 CREATE INDEX idx_pelanggaran_nis ON pelanggaran (nis);
+CREATE INDEX idx_pelanggaran_tanggal ON pelanggaran (tanggal_kejadian);
 
 CREATE TABLE partisipasi_ekskul (
     nis          VARCHAR(20) NOT NULL REFERENCES siswa (nis),

@@ -45,6 +45,7 @@ class Settings:
     # Teks pertanyaan guru untuk klasifikasi intent tetap dikirim selama GEMINI_API_KEY terisi.
     gemini_send_data: bool = _flag("GEMINI_SEND_DATA", "0")
     chat_rate_per_minute: int = int(os.environ.get("CHAT_RATE_PER_MINUTE", "20"))
+    login_rate_per_minute: int = int(os.environ.get("LOGIN_RATE_PER_MINUTE", "10"))
     dataset_dir: str = os.environ.get(
         "DATASET_DIR", str(Path(__file__).resolve().parents[2] / "database" / "dataset_bersih")
     )

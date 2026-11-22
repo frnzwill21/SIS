@@ -63,7 +63,8 @@ def find_guru(db: Db, text: str, explicit: str | None = None) -> list[dict]:
         if not c or c in seen or len(c) < 3:
             continue
         seen.add(c)
-        rows = db.rows(queries.GURU_SEARCH, q=c)
+        escaped = c.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        rows = db.rows(queries.GURU_SEARCH, q=escaped)
         if rows:
             if len(rows) > 1 and " " in c:
                 words = c.lower().split()

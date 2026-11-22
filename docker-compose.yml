@@ -9,8 +9,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-sis}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?isi POSTGRES_PASSWORD di .env}
       POSTGRES_DB: ${POSTGRES_DB:-sis}
+      TZ: Asia/Jakarta
+      PGTZ: Asia/Jakarta
     ports:
-      - "5432:5432"            # untuk DBeaver
+      - "127.0.0.1:5432:5432"  # lokal saja (untuk DBeaver)
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -34,9 +36,11 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_SEND_DATA: ${GEMINI_SEND_DATA:-0}
       DATASET_DIR: /data/dataset_bersih
       SQL_DIR: /data/init
       SEED_OUTPUT_DIR: /app/seed_output
+      TZ: Asia/Jakarta
     volumes:
       - ./backend/app:/app/app
       - ./backend/scripts:/app/scripts
@@ -45,6 +49,12 @@ services:
       - ./backend/seed_output:/app/seed_output
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
 
   frontend:
     # Target 'build' berhenti sebelum tahap production standalone, sehingga npm dan seluruh source/devDependencies tersedia
@@ -55,7 +65,8 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     # Menjalankan Next.js dev server (Fast Refresh)
     command: npm run dev
     environment:

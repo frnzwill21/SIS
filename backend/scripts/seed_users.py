@@ -1,4 +1,4 @@
-"""Buat 3 akun admin dan 10 akun teacher dengan kata sandi awal acak.
+"""Buat 13 akun sampel sesuai ref/06: 3 admin, 1 bk, 1 kepala_sekolah, dan 8 teacher dengan kata sandi awal acak.
 
 Kata sandi ditulis SEKALI ke seed_output/seed_credentials.txt (diabaikan Git) dan wajib diganti saat login pertama.
 10 guru penerima akun SEMENTARA = wali kelas 10 kelas pertama (berdasarkan kode kelas), sampai pemilik proyek
@@ -47,7 +47,8 @@ def seed(conn, nips_file: str | None = None) -> list[tuple[str, str, str]]:
             row = cur.fetchone()
             if not row:
                 raise SystemExit(f"NIP {nip} tidak ada di tabel guru.")
-            plan.append((f"guru{i:02d}", row[0], nip, "teacher"))
+            role = "bk" if i == 1 else ("kepala_sekolah" if i == 2 else "teacher")
+            plan.append((f"guru{i:02d}", row[0], nip, role))
         for username, nama, nip, role in plan:
             cur.execute("SELECT 1 FROM users WHERE username = %s", (username,))
             if cur.fetchone():

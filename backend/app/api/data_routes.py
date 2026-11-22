@@ -1,9 +1,9 @@
-"""Endpoint data sekolah kelas XII (hanya baca). Admin dan teacher sama-sama boleh membaca."""
+"""Endpoint data sekolah kelas XII (hanya baca). Data pelanggaran dibatasi ke admin, kepala_sekolah, dan bk."""
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Connection, text
+from sqlalchemy import Connection, inspect, text
 
 from .. import queries
-from ..auth import active_user
+from ..auth import active_user, require_pelanggaran_access
 from ..db import get_conn
 
 router = APIRouter(tags=["data sekolah"], dependencies=[Depends(active_user)])
@@ -43,6 +43,10 @@ def jadwal_kelas(kode: str, hari: str = "", conn: Connection = Depends(get_conn)
     return {"data": _rows(conn, queries.JADWAL_KELAS, kelas=kode, hari=hari)}
 
 
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @router.get("/siswa")
 def cari_siswa(
     q: str = "",
@@ -51,7 +55,7 @@ def cari_siswa(
     page_size: int = Query(25, ge=1, le=100),
     conn: Connection = Depends(get_conn),
 ):
-    q = q.strip()
+    q = _escape_like(q.strip())
     total = conn.execute(text(queries.SISWA_SEARCH_COUNT), {"q": q, "kelas": kelas}).scalar_one()
     data = _rows(conn, queries.SISWA_SEARCH, q=q, kelas=kelas, limit=page_size, offset=(page - 1) * page_size)
     return {"data": data, "meta": {"page": page, "page_size": page_size, "total": total}}
@@ -85,8 +89,8 @@ def kehadiran_siswa(nis: str, conn: Connection = Depends(get_conn)):
 
 
 @router.get("/siswa/{nis}/pelanggaran")
-def pelanggaran_siswa(nis: str, user: dict = Depends(active_user), conn: Connection = Depends(get_conn)):
-    """Data sensitif: setiap akses dicatat di audit_log."""
+def pelanggaran_siswa(nis: str, user: dict = Depends(require_pelanggaran_access), conn: Connection = Depends(get_conn)):
+    """Data sensitif: hanya admin, kepala_sekolah, dan bk; setiap akses dicatat di audit_log."""
     _ensure_siswa(conn, nis)
     conn.execute(
         text(queries.AUDIT_INSERT),
@@ -97,13 +101,40 @@ def pelanggaran_siswa(nis: str, user: dict = Depends(active_user), conn: Connect
 
 # ---------------------------------------------------------------- PKL, ekskul, guru, profil sekolah
 @router.get("/pkl/penempatan")
-def pkl_penempatan(kelas: str = "", sesi: int = Query(0, ge=0, le=2), conn: Connection = Depends(get_conn)):
-    return {"data": _rows(conn, queries.PKL_PENEMPATAN_LIST, kelas=kelas, sesi=sesi)}
+def pkl_penempatan(
+    q: str = "",
+    kelas: str = "",
+    sesi: int = Query(0, ge=0, le=2),
+    status: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    conn: Connection = Depends(get_conn),
+):
+    params = {
+        "q": _escape_like(q.strip()),
+        "kelas": kelas.strip(),
+        "sesi": sesi,
+        "status": status.strip(),
+    }
+    summary_row = conn.execute(text(queries.PKL_PENEMPATAN_SUMMARY), params).mappings().one()
+    total = int(summary_row["total"] or 0)
+    data = _rows(conn, queries.PKL_PENEMPATAN_LIST, **params, limit=page_size, offset=(page - 1) * page_size)
+    return {
+        "data": data,
+        "meta": {"page": page, "page_size": page_size, "total": total},
+        "summary": {
+            "total": total,
+            "sesi1": int(summary_row["sesi1"] or 0),
+            "sesi2": int(summary_row["sesi2"] or 0),
+            "selesai": int(summary_row["selesai"] or 0),
+            "berlangsung": int(summary_row["berlangsung"] or 0),
+        },
+    }
 
 
 @router.get("/pkl/perusahaan")
-def pkl_perusahaan(conn: Connection = Depends(get_conn)):
-    return {"data": _rows(conn, queries.PERUSAHAAN_LIST)}
+def pkl_perusahaan(q: str = "", jurusan: str = "", conn: Connection = Depends(get_conn)):
+    return {"data": _rows(conn, queries.PERUSAHAAN_SEARCH, q=_escape_like(q.strip()), jurusan=jurusan.strip())}
 
 
 @router.get("/ekskul")
@@ -113,7 +144,7 @@ def daftar_ekskul(conn: Connection = Depends(get_conn)):
 
 @router.get("/guru")
 def cari_guru(q: str = "", conn: Connection = Depends(get_conn)):
-    return {"data": _rows(conn, queries.GURU_SEARCH, q=q.strip())}
+    return {"data": _rows(conn, queries.GURU_SEARCH, q=_escape_like(q.strip()))}
 
 
 @router.get("/guru/{nip}/jadwal")
@@ -135,3 +166,25 @@ def profil_sekolah():
         return {"data": json.loads(path.read_text(encoding="utf-8"))}
     except (OSError, json.JSONDecodeError):
         raise HTTPException(503, {"code": "UNAVAILABLE", "message": "Profil sekolah belum tersedia.", "details": None})
+
+
+@router.get("/master/ringkasan")
+def master_ringkasan(conn: Connection = Depends(get_conn)):
+    row = conn.execute(text(queries.MASTER_RINGKASAN)).mappings().one()
+    tahun_ajaran = "2026/2027"
+    if inspect(conn).has_table("periode_akademik"):
+        ta_row = conn.execute(text(queries.TAHUN_AJARAN_AKTIF)).first()
+        if ta_row and ta_row[0]:
+            tahun_ajaran = str(ta_row[0])
+    return {
+        "data": {
+            "siswa": int(row["siswa"] or 0),
+            "kelas": int(row["kelas"] or 0),
+            "guru": int(row["guru"] or 0),
+            "penempatan_pkl": int(row["penempatan_pkl"] or 0),
+            "perusahaan_pkl": int(row["perusahaan_pkl"] or 0),
+            "ekstrakurikuler": int(row["ekstrakurikuler"] or 0),
+            "jurusan": int(row["jurusan"] or 0),
+            "tahun_ajaran": tahun_ajaran,
+        }
+    }

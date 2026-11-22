@@ -1,101 +1,64 @@
-# School Intelligence System (SIS) - SMKN 4 Bandung
+# Panduan Menjalankan SIS (SMKN 4 Bandung, Kelas XII)
 
-Sistem kecerdasan institusi dan ruang kerja analitik berbasis AI untuk SMKN 4 Bandung, menggabungkan **Hybrid Query Engine (Gemini 3.5 Flash Lite + RAG)**, **PostgreSQL 16**, dan **Next.js**.
+## A. Jalur Docker (satu perintah, disarankan untuk kamu)
 
----
+Prasyarat: Docker Desktop menyala.
 
-## Prasyarat & Pilihan Metode Menjalankan
+1. Salin env: `cp .env.example .env` (Windows: `copy .env.example .env`)
+2. Edit `.env`: isi `POSTGRES_PASSWORD` dan `JWT_SECRET` (teks acak panjang). `GEMINI_API_KEY` boleh kosong.
+3. Jalankan: `docker compose up --build`
+4. Tunggu sampai log backend menulis proses impor selesai (kali pertama: skema, 21 tabel, akun).
+5. Buka:
+   - Aplikasi: http://localhost:3000
+   - Dokumentasi API: http://localhost:8000/docs
+   - Cek kesehatan: http://localhost:8000/api/v1/health
+   - DBeaver: host `localhost`, port `5432`, database/user/password sesuai `.env`
+6. Kata sandi akun: buka `backend/seed_output/seed_credentials.txt` (admin1..3, guru01..10). Login pertama diminta ganti kata sandi.
 
-Pilih **Jalur A (Docker / Kontainer)** atau **Jalur B (Windows Native / Skrip)** sesuai kondisi komputer Anda:
+Berhenti: `Ctrl+C` lalu `docker compose down`. Reset total termasuk data: `docker compose down -v`.
 
-| Jalur | Target Pengguna | Prasyarat yang Wajib Ada | Keunggulan Utama |
-| :--- | :--- | :--- | :--- |
-| **Jalur A: Docker** *(Direkomendasikan)* | Komputer baru / multi-OS | Git, Docker Desktop | Tanpa install runtime lokal (Python, Node, PostgreSQL sudah terisolasi di kontainer) |
-| **Jalur B: Skrip Native** | Windows tanpa Docker | Git, Python 3.11+, Node.js 18+, PostgreSQL 16 / WSL | Eksekusi native yang ringan, setup otomatis sekali klik |
+## B. Jalur manual (untuk anggota tim, via cmd)
 
----
+Prasyarat: Python 3.11+, Node 20+, dan PostgreSQL 16 (boleh dari Docker saja: `docker compose up db`).
 
-## Jalur A: Menjalankan Menggunakan Docker (Kontainer)
-
-Metode paling praktis untuk instalasi baru atau lingkungan lintas platform tanpa perlu menginstal dependensi bahasa pemrograman di komputer lokal.
-
-### 1. Prasyarat
-- [Git](https://git-scm.com/)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (pastikan aplikasi Docker Desktop dalam status *running*)
-
-### 2. Langkah Menjalankan
-1. Buka terminal dan **arahkan direktori kerja ke folder root proyek**:
-   ```bash
-   cd path/ke/folder/sis
-   ```
-2. Salin berkas konfigurasi environment dari template:
-   ```bash
-   cp .env.example .env
-   # Di Windows PowerShell: Copy-Item .env.example .env
-   ```
-3. Bangun dan jalankan seluruh layanan (Database, Backend, dan Frontend) dengan satu perintah:
-   ```bash
-   docker compose up --build
-   ```
-4. Buka aplikasi di peramban:
-   - **Aplikasi Frontend**: [http://localhost:3000](http://localhost:3000)
-   - **Dokumentasi Interaktif API**: [http://localhost:8000/docs](http://localhost:8000/docs)
-   - **Pemeriksaan Kesehatan Sistem**: [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health)
-
-*Untuk menghentikan layanan:* Tekan `Ctrl + C` lalu ketik `docker compose down`. Untuk mengosongkan dan mereset database dari nol: `docker compose down -v`.
-
----
-
-## Jalur B: Menjalankan di Windows Native (`setup.bat` & `run.bat`)
-
-Metode untuk pengguna Windows yang tidak menggunakan Docker Desktop.
-
-### 1. Prasyarat
-Pastikan tiga runtime berikut sudah terinstal di komputer sebelum memulai:
-1. **Python 3.11 atau lebih baru**: Unduh dari [python.org](https://www.python.org/downloads/).
-   > **PENTING**: Wajib mencentang kotak **"Add Python to PATH"** saat awal instalasi.
-2. **Node.js (18 LTS atau 20+)**: Unduh dari [nodejs.org](https://nodejs.org/).
-3. **PostgreSQL 16**: Terinstal secara native di Windows atau melalui WSL Ubuntu.
-
-### 2. Inisialisasi Pertama Kali (`setup.bat`)
-1. Buka File Explorer, masuk ke folder proyek `SIS`, lalu klik dua kali berkas:
-   ```text
-   setup.bat
-   ```
-2. Skrip otomatis akan:
-   - Memeriksa dan membuat berkas `.env` jika belum tersedia.
-   - Membuat virtual environment Python (`backend/.venv`) dan memasang dependensi backend.
-   - Memasang dependensi frontend (`npm install`).
-   - Memverifikasi database, menyesuaikan host IP WSL secara dinamis, dan memuat skema beserta dataset (21 tabel, 56.071 baris).
-   - Menghasilkan berkas peluncur `run.bat`, kemudian menghapus berkas `setup.bat` secara mandiri (*self-destruct*).
-
-### 3. Menjalankan Sehari-hari (`run.bat`)
-Setelah inisialisasi awal selesai, jalankan seluruh layanan kapan saja hanya dengan mengklik dua kali:
-```text
-run.bat
+Backend:
 ```
-Skrip ini akan otomatis menyalakan PostgreSQL di background, FastAPI Backend (`:8000`), dan Next.js Frontend (`:3000`).
-
----
-
-## Akun Pengguna
-
-Sistem menyediakan 13 akun bawaan (3 akun Administrator dan 10 akun Guru).
-
-Demi keamanan dan privasi, rincian kredensial akun awal **tidak dicantumkan di repositori publik**. Kredensial awal hanya dihasilkan secara lokal pada saat instalasi pertama dan disimpan di direktori lokal:
-```text
-backend/seed_output/seed_credentials.txt
+cd backend
+python -m venv .venv
+.venv\Scripts\activate          (Linux/Mac: source .venv/bin/activate)
+pip install -r requirements.txt
 ```
-*(Direktori ini otomatis diabaikan oleh Git melalui `.gitignore`).*
+Buat `.env` di root proyek (dari `.env.example`), aktifkan baris `DATABASE_URL=postgresql+psycopg://USER:PASS@localhost:5432/sis`, lalu:
+```
+python -m scripts.bootstrap     # skema + impor 21 CSV + buat akun (sekali saja)
+uvicorn app.main:app --reload --port 8000
+```
+Frontend (terminal kedua):
+```
+cd frontend
+npm install
+npm run dev
+```
+Buka http://localhost:3000. Jika alamat backend berbeda, set `NEXT_PUBLIC_API_URL` (contoh `http://localhost:8000/api/v1`) sebelum `npm run dev`.
 
-Setiap pengguna diwajibkan memperbarui kata sandi pada saat pertama kali masuk ke sistem.
+## C. Mengaktifkan Gemini (opsional)
 
+Isi `GEMINI_API_KEY` di `.env`, restart backend. Tanpa kunci, chat tetap jalan dengan pembaca pertanyaan berbasis aturan. Cek di `/api/v1/health` (field `gemini`). NIS/NISN tidak pernah dikirim ke Gemini.
 
----
+## D. Cek cepat setelah jalan
 
-## Tumpukan Teknologi & Arsitektur
+1. Login `admin1` berhasil, lalu ganti kata sandi.
+2. Menu Kelas menampilkan 17 kelas; Siswa menampilkan 612 siswa total.
+3. Tanya di chat: "Siapa wali kelas XII TITL 6?" (jawab Ina Suratma).
+4. Tanya: "Siswa XII RPL 1 yang nilainya di bawah KKM", hasil berupa tabel.
+5. Tanya soal pelanggaran siswa: muncul penanda data sensitif, dan baris baru di Admin > Audit log.
+6. Tanya "kelas XI": ditolak karena di luar cakupan.
 
-- **Frontend**: Next.js 14, React 18, TypeScript, Tailwind CSS, Lucide Icons.
-- **Backend**: FastAPI, Uvicorn, SQLAlchemy 2, Psycopg 3, Pydantic 2, PyJWT.
-- **AI Engine**: Hybrid Query Engine ditenagai oleh Google Gemini (`gemini-3.5-flash-lite`) dan RAG Leksikal BM25/IDF atas dokumen profil sekolah.
-- **Database**: PostgreSQL 16 (21 tabel data akademik, 3 tabel sistem & audit).
+## E. Masalah umum
+
+- `JWT_SECRET`/`POSTGRES_PASSWORD` error saat compose: belum diisi di `.env`.
+- Port 5432/8000/3000 terpakai: matikan aplikasi lain atau ubah mapping port di `docker-compose.yml`.
+- Frontend "Tidak bisa menghubungi server": backend belum siap, atau `NEXT_PUBLIC_API_URL` salah. Nilai itu ditanam saat build, jadi ubah lalu `docker compose up --build frontend`.
+- Login ditolak (CORS): pastikan `CORS_ORIGINS` memuat alamat frontend persis (`http://localhost:3000`).
+- Data tidak masuk: `docker compose down -v` lalu naikkan lagi untuk impor ulang dari nol.
+- Lupa kata sandi: admin lain bisa reset di menu Admin > Akun.

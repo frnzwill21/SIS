@@ -19,7 +19,15 @@ os.environ["GEMINI_API_KEY"] = ""  # paksa mode aturan
 from app import engine  # noqa: E402
 from app.engine.compose import valid_output  # noqa: E402
 from app.engine.core import Result, bound, plain  # noqa: E402
-from app.engine.parsing import normalize_kelas, parse_ambang, parse_semester  # noqa: E402
+from app.engine.parsing import (  # noqa: E402
+    mentions_all_scope,
+    normalize_kelas,
+    parse_ambang,
+    parse_limit,
+    parse_semester,
+    parse_tingkat_pelanggaran,
+    parse_urutan,
+)
 
 ORDER = ("jurusan guru mapel_jadwal mapel_rapor periode_akademik jenis_pelanggaran predikat_ekskul sesi_pkl kelas guru_mapel "
          "pemetaan_mapel siswa ekstrakurikuler pembina_ekskul perusahaan_pkl nilai kehadiran pelanggaran partisipasi_ekskul "
@@ -57,8 +65,13 @@ def check(cond: bool, label: str) -> None:
     print(("  ok   " if cond else "  GAGAL ") + label)
 
 
-def ask(q: str) -> dict:
-    r = engine.answer(open_db, q)
+def ask(q: str, role: str = "admin", history=None) -> dict:
+    r = engine.answer(open_db, q, role=role, history=history)
+    assert r["mode"] in ("ai", "lokal"), f"mode tidak valid: {r['mode']}"
+    for step in r.get("jejak_pikir", []):
+        assert step["detail"] == [], f"detail jejak_pikir harus kosong: {step}"
+        teks_trace = f"{step['judul']} {step['ringkasan']}".lower()
+        assert all(tok not in teks_trace for tok in ("gemini", "sql", "rbac", "ranking_kelas")), f"jargon di trace: {step}"
     print(f"\nQ: {q}\n   intent={r['intent']['intent']} params={r['intent']['params']}\n   A: {r['jawaban'][:230]}")
     return r
 
@@ -68,6 +81,14 @@ check(normalize_kelas("XII TITL 6") == "XII-TITL-6" and normalize_kelas("titl6")
 check(normalize_kelas("XII TITL 9") is None, "kelas tidak ada -> None")
 check(parse_semester("semester 5") == 5 and parse_semester("semester lalu") == 4 and parse_semester("halo") == 0, "semester")
 check(parse_ambang("alpha lebih dari 5 hari") == 6 and parse_ambang("alpha minimal 3") == 3, "ambang alpha")
+check(parse_limit("saya butuh 3 murid") == 3 and parse_limit("top 5 siswa") == 5 and parse_limit("99 siswa") == 40, "parse_limit")
+check(
+    parse_tingkat_pelanggaran("pelanggaran berat") == "Berat"
+    and parse_tingkat_pelanggaran("Fasilitas apa yang sedang dibangun?") == "",
+    "parse_tingkat_pelanggaran",
+)
+check(parse_urutan("nilai terendah") == "asc" and parse_urutan("nilai terbaik") == "desc", "parse_urutan")
+check(mentions_all_scope("di seluruh kelas") and not mentions_all_scope("XII RPL 1"), "mentions_all_scope")
 
 print("\n== intent dan jawaban")
 r = ask("Siapa wali kelas XII TITL 6?")
@@ -99,6 +120,57 @@ check(r["intent"]["intent"] == "penempatan_pkl" and r["tabel"] is not None, "PKL
 r = ask("pelanggaran XII RPL 1")
 check(r["sensitif"] is True, "pelanggaran kelas ditandai sensitif")
 
+print("\n== SQL Engine v2 analitik, sapaan, multi-turn & RBAC")
+r = ask("hai")
+check(r["intent"]["intent"] == "sapaan" and not r["butuh_klarifikasi"] and r["contoh"] == [], "sapaan fast-path")
+r = ask("saya butuh 3 murid yang melakukan pelanggaran berat", role="admin")
+check(
+    r["intent"]["intent"] == "pelanggaran_siswa"
+    and r["sensitif"] is True
+    and r["tabel"] is not None
+    and len(r["tabel"]["baris"]) == 3
+    and not r["butuh_klarifikasi"],
+    "3 murid pelanggaran berat (admin)",
+)
+r_teacher = ask("saya butuh 3 murid yang melakukan pelanggaran berat", role="teacher")
+check(r_teacher.get("ditolak") is True and r_teacher["tabel"] is None and r_teacher["sumber"] == [], "3 murid pelanggaran berat ditolak untuk teacher")
+r = ask("berikan saya data 3 murid dengan nilai terbaik di seluruh kelas")
+check(
+    r["intent"]["intent"] == "ranking_kelas"
+    and r["tabel"] is not None
+    and len(r["tabel"]["baris"]) == 3
+    and "Kelas" in r["tabel"]["kolom"]
+    and not r["butuh_klarifikasi"],
+    "3 murid nilai terbaik seluruh kelas",
+)
+r = ask("berapa jumlah siswa per jurusan?")
+check(
+    r["intent"]["intent"] == "statistik_sekolah"
+    and r["tabel"] is not None
+    and len(r["tabel"]["baris"]) == 5
+    and "612" in r["jawaban"],
+    "statistik jumlah siswa per jurusan",
+)
+r = ask("siapa saja guru Matematika?")
+check(r["intent"]["intent"] == "jadwal_guru" and r["tabel"] is not None and len(r["tabel"]["baris"]) >= 1, "guru by mapel")
+r = ask("daftar mitra PKL untuk jurusan RPL")
+check(r["tabel"] is not None and len(r["tabel"]["baris"]) >= 5 and not r["butuh_klarifikasi"], "mitra PKL by jurusan")
+r = ask("rata-rata nilai per jurusan semester 5")
+check(r["tabel"] is not None and len(r["tabel"]["baris"]) == 5 and not r["butuh_klarifikasi"], "rata-rata nilai per jurusan")
+
+hist = [
+    {"role": "user", "konten": "ranking nilai XII RPL 1 semester 5"},
+    {"role": "ai", "konten": "ok", "intent": {"intent": "ranking_kelas", "params": {"kelas": "XII-RPL-1", "semester": 5, "urutan": "desc"}}},
+]
+r_follow = ask("kalau semester 4?", history=hist)
+check(
+    r_follow["intent"]["intent"] == "ranking_kelas"
+    and r_follow["intent"]["params"].get("kelas") == "XII-RPL-1"
+    and r_follow["intent"]["params"].get("semester") == 4
+    and r_follow["tabel"] is not None,
+    "multi-turn follow-up semester",
+)
+
 print("\n== penanganan kasus khusus")
 r = ask("nilai siswa kelas XI RPL 1")
 check(r["intent"]["intent"] == "di_luar_cakupan", "kelas XI di luar cakupan")
@@ -106,8 +178,13 @@ r = ask("wali kelas XII TITL 9")
 check("tidak ada" in r["jawaban"].lower() and r["butuh_klarifikasi"], "kelas tidak ada")
 r = ask("nilai Budi")
 check(r["butuh_klarifikasi"] or r["tabel"] is not None, "nama ambigu / tidak ketemu ditangani")
-r = ask("lorem ipsum")
-check(r["butuh_klarifikasi"], "pertanyaan tidak dikenali -> klarifikasi")
+r = ask("lorem ipsum", role="teacher")
+check(
+    r["butuh_klarifikasi"]
+    and 1 <= len(r["contoh"]) <= 3
+    and all("pelanggaran" not in c.lower() for c in r["contoh"]),
+    "pertanyaan tidak dikenali -> klarifikasi + smart suggestions RBAC-safe",
+)
 
 print("\n== validator output Gemini")
 res = Result("Rata-rata 80,5 dari 13 mapel.", ["a"], [[77]])

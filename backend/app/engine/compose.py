@@ -29,6 +29,8 @@ _COMMON_CAPS = {
     "Hanya", "Semua", "Jadwal", "Wali", "Guru", "Mata", "Pelajaran", "Jumlah", "Total", "Rata", "Tabel", "Berdasarkan",
     "Menurut", "Sesuai", "Informasi", "Terdapat", "Sebanyak", "Selain", "Sementara", "Jika", "Silakan", "Mohon",
     "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu",
+    "Peringkat", "Jurusan", "Ekskul", "Statistik", "Ringkasan", "Laki", "Perempuan", "Sesi", "Selesai", "Berlangsung",
+    "Seluruh", "Tertinggi", "Terendah", "Terbaik", "Terbanyak", "Mitra", "RPL", "DKV", "TITL", "TOI", "TAV",
 }
 _SYSTEM = (
     "Kamu asisten guru SMKN 4 Bandung. Tulis jawaban singkat (maksimal 4 kalimat) dalam bahasa Indonesia yang ramah, "
@@ -104,7 +106,13 @@ def safe_payload(res: Result) -> dict:
 
 def compose(question: str, res: Result) -> tuple[str, str]:
     """Kembalikan (teks_jawaban, mode)."""
-    if res.butuh_klarifikasi or res.sensitif or not gemini.enabled() or not settings.gemini_send_data:
+    if (
+        res.butuh_klarifikasi
+        or res.sensitif
+        or (not res.sumber and not res.baris)
+        or not gemini.enabled()
+        or not settings.gemini_send_data
+    ):
         return res.jawaban, "aturan"
     prompt = (
         f"Pertanyaan guru: {_redact(question)}\n\nJawaban baku (fakta benar): {_redact(res.jawaban)}\n\n"

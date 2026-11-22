@@ -1,8 +1,464 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-body { @apply bg-slate-50 text-slate-800; }
-.btn { @apply rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50; }
-.btn-ghost { @apply rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-100; }
-.input { @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-600 focus:outline-none; }
-.card { @apply rounded-lg border border-slate-200 bg-white p-4 shadow-sm; }
+
+:root {
+  color-scheme: light dark;
+
+  --bg-canvas: #FAF9F6;
+  --bg-sidebar: #F3F2EE;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F5F4F0;
+  --text-primary: #18181B;
+  --text-secondary: #52525B;
+  --text-muted: #71717A;
+  --border-subtle: #E4E4E0;
+  --accent-ink: #18181B;
+  --accent-ink-fg: #FAF9F6;
+  --accent-ink-hover: #27272A;
+
+  --scrollbar-track: #F3F2EE;
+  --scrollbar-thumb: #D4D4CE;
+
+  --table-cell-px: 1rem;
+  --table-cell-py: 0.7rem;
+  --table-head-py: 0.7rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not(:has(> head > meta[name="color-scheme"][content="light"])) {
+    --bg-canvas: #141413;
+    --bg-sidebar: #0E0E0F;
+    --bg-surface: #1B1B1E;
+    --bg-elevated: #242428;
+    --text-primary: #F4F4F5;
+    --text-secondary: #A1A1AA;
+    --text-muted: #71717A;
+    --border-subtle: #27272A;
+    --accent-ink: #F4F4F5;
+    --accent-ink-fg: #141413;
+    --accent-ink-hover: #E4E4E7;
+    --scrollbar-track: #141413;
+    --scrollbar-thumb: #3F3F46;
+  }
+}
+
+:root:has(> head > meta[name="color-scheme"][content="dark"]),
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-canvas: #141413;
+  --bg-sidebar: #0E0E0F;
+  --bg-surface: #1B1B1E;
+  --bg-elevated: #242428;
+  --text-primary: #F4F4F5;
+  --text-secondary: #A1A1AA;
+  --text-muted: #71717A;
+  --border-subtle: #27272A;
+  --accent-ink: #F4F4F5;
+  --accent-ink-fg: #141413;
+  --accent-ink-hover: #E4E4E7;
+  --scrollbar-track: #141413;
+  --scrollbar-thumb: #3F3F46;
+}
+
+:root:has(> head > meta[name="color-scheme"][content="light"]),
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-canvas: #FAF9F6;
+  --bg-sidebar: #F3F2EE;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F5F4F0;
+  --text-primary: #18181B;
+  --text-secondary: #52525B;
+  --text-muted: #71717A;
+  --border-subtle: #E4E4E0;
+  --accent-ink: #18181B;
+  --accent-ink-fg: #FAF9F6;
+  --accent-ink-hover: #27272A;
+  --scrollbar-track: #F3F2EE;
+  --scrollbar-thumb: #D4D4CE;
+}
+
+@supports (color: light-dark(white, black)) {
+  :root {
+    --bg-canvas: light-dark(#FAF9F6, #141413);
+    --bg-sidebar: light-dark(#F3F2EE, #0E0E0F);
+    --bg-surface: light-dark(#FFFFFF, #1B1B1E);
+    --bg-elevated: light-dark(#F5F4F0, #242428);
+    --text-primary: light-dark(#18181B, #F4F4F5);
+    --text-secondary: light-dark(#52525B, #A1A1AA);
+    --text-muted: light-dark(#71717A, #71717A);
+    --border-subtle: light-dark(#E4E4E0, #27272A);
+    --accent-ink: light-dark(#18181B, #F4F4F5);
+    --accent-ink-fg: light-dark(#FAF9F6, #141413);
+    --accent-ink-hover: light-dark(#27272A, #E4E4E7);
+    --scrollbar-track: light-dark(#F3F2EE, #141413);
+    --scrollbar-thumb: light-dark(#D4D4CE, #3F3F46);
+  }
+}
+
+:root[data-density="compact"] {
+  --table-cell-px: 0.625rem;
+  --table-cell-py: 0.35rem;
+  --table-head-py: 0.45rem;
+}
+
+:root {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  accent-color: var(--accent-ink);
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+    width: 100%;
+    overflow-x: clip;
+    overscroll-behavior: none;
+  }
+
+  html.sis-shell-locked,
+  html.sis-shell-locked body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  body {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    background-color: var(--accent-ink);
+    color: var(--accent-ink-fg);
+  }
+  .btn:hover:not(:disabled) {
+    background-color: var(--accent-ink-hover);
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    border-color: var(--border-subtle);
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background-color: var(--bg-elevated);
+  }
+
+  .input {
+    @apply w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none;
+    border-color: var(--border-subtle);
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
+  }
+  .input::placeholder {
+    color: var(--text-muted);
+  }
+  .input:focus {
+    border-color: var(--accent-ink);
+  }
+
+  .card {
+    @apply rounded-xl border p-4 shadow-sm;
+    border-color: var(--border-subtle);
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
+  }
+
+  .scroll-region {
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  @supports not (scrollbar-color: auto) {
+    .scroll-region {
+      scrollbar-width: auto;
+    }
+
+    .scroll-region::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    .scroll-region::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .scroll-region::-webkit-scrollbar-thumb {
+      background-color: var(--scrollbar-thumb);
+      border-radius: 9999px;
+      border: 2px solid transparent;
+      background-clip: content-box;
+    }
+  }
+
+  .chat-composer-input {
+    field-sizing: content;
+    width: 100%;
+    min-block-size: 2.75rem;
+    max-block-size: 11.25rem;
+    height: auto;
+    resize: none;
+  }
+
+  .select-branded {
+    @apply w-full rounded-lg border py-2 pl-3 pr-9 text-sm transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-50;
+    appearance: none;
+    -webkit-appearance: none;
+    border-color: var(--border-subtle);
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.65rem center;
+    background-size: 1rem 1rem;
+  }
+
+  .select-branded:focus {
+    border-color: var(--accent-ink);
+  }
+
+  @supports (appearance: base-select) {
+    select.select-branded,
+    select.select-branded::picker(select) {
+      appearance: base-select;
+    }
+
+    select.select-branded {
+      align-items: center;
+      gap: 0.5rem;
+      padding-right: 0.75rem;
+      background-image: none;
+    }
+
+    select.select-branded::picker-icon {
+      color: var(--text-muted);
+      transition: transform 180ms ease;
+    }
+
+    select.select-branded:open::picker-icon {
+      transform: rotate(180deg);
+    }
+
+    select.select-branded:open::picker(select) {
+      margin-block-start: 0.25rem;
+      border: 1px solid var(--border-subtle);
+      border-radius: 0.75rem;
+      background-color: var(--bg-surface);
+      color: var(--text-primary);
+      padding: 0.25rem;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.14), 0 4px 10px -4px rgba(0, 0, 0, 0.08);
+    }
+
+    select.select-branded option {
+      border-radius: 0.5rem;
+      padding: 0.45rem 0.65rem;
+      font-size: 0.875rem;
+      color: var(--text-primary);
+    }
+
+    select.select-branded option:hover,
+    select.select-branded option:focus-visible {
+      background-color: var(--bg-elevated);
+    }
+
+    select.select-branded option:checked {
+      background-color: var(--bg-elevated);
+      font-weight: 600;
+    }
+  }
+}
+
+/* Accessibility & post-interaction validation (validate-input-after-interaction) */
+.visually-hidden:where(:not(:focus-within, :active)) {
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
+
+.error-msg {
+  display: none;
+}
+
+:is(input, select, textarea):is(:user-invalid, .user-invalid-fallback) {
+  border-color: #dc2626;
+}
+
+:root[data-theme="dark"] :is(input, select, textarea):is(:user-invalid, .user-invalid-fallback) {
+  border-color: #f87171;
+}
+
+:is(input, select, textarea):is(:user-invalid, .user-invalid-fallback) + .error-msg,
+.field:has(:is(input, select, textarea):is(:user-invalid, .user-invalid-fallback)) .error-msg {
+  display: block;
+}
+
+:is(input, select, textarea):is([pattern], [minlength], [type="email"]):is(:user-valid, .user-valid-fallback),
+.field :is(input, select, textarea):is(:user-valid, .user-valid-fallback) {
+  border-color: #16a34a;
+}
+
+:root[data-theme="dark"] :is(input, select, textarea):is([pattern], [minlength], [type="email"]):is(:user-valid, .user-valid-fallback),
+:root[data-theme="dark"] .field :is(input, select, textarea):is(:user-valid, .user-valid-fallback) {
+  border-color: #4ade80;
+}
+
+/* Native <dialog> scroll containment (prevent-page-scroll-under-modal-dialog) */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background-color: rgba(14, 14, 15, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+@keyframes sis-node-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.42;
+    transform: scale(0.86);
+  }
+}
+
+.sis-node-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sis-node-pulse 1.3s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sis-node-pulse {
+    animation: none;
+  }
+}
+
+/* Progressive native <details> smooth disclosure (.sis-disclosure) */
+details.sis-disclosure {
+  interpolate-size: allow-keywords;
+}
+
+details.sis-disclosure > summary {
+  list-style: none;
+}
+
+details.sis-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.sis-disclosure::details-content {
+  contain: layout;
+  overflow: clip;
+  block-size: 0;
+  opacity: 0;
+}
+
+details.sis-disclosure[open]::details-content {
+  block-size: auto;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  details.sis-disclosure::details-content {
+    transition-property: block-size, opacity, content-visibility;
+    transition-duration: 240ms, 180ms, 240ms;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1), ease, ease;
+    transition-behavior: allow-discrete;
+  }
+
+  /* KineticConstellation opt-in keyframes & helper classes */
+  @keyframes sis-orbit-slow {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes sis-orbit-active {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes sis-orbit-fast {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes sis-node-pulse-soft {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.48;
+      transform: scale(0.84);
+    }
+  }
+
+  @keyframes sis-path-scan {
+    from {
+      stroke-dashoffset: 48;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  .sis-orbit-slow {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: sis-orbit-slow 24s linear infinite;
+  }
+
+  .sis-orbit-active {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: sis-orbit-active 6s linear infinite;
+  }
+
+  .sis-orbit-fast {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: sis-orbit-fast 2.4s linear infinite;
+  }
+
+  .sis-node-pulse-soft {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: sis-node-pulse-soft 1.6s ease-in-out infinite;
+  }
+
+  .sis-path-scan {
+    stroke-dasharray: 8 4;
+    animation: sis-path-scan 1.4s linear infinite;
+  }
+}
